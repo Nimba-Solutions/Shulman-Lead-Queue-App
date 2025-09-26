@@ -1,0 +1,199 @@
+<template>
+    <!-- Utility Bar Compact Interface -->
+    <template if:true={showUtilityInterface}>
+        <div class="utility-container">
+            <!-- Show Get Next Record button when NO assignments -->
+            <template if:false={hasAssignments}>
+                <div class="button-wrapper">
+                    <lightning-button 
+                        variant="brand" 
+                        label={assignButtonLabel}
+                        icon-name="utility:chevronright"
+                        onclick={handleAssignNext}
+                        disabled={isAssignButtonDisabled}
+                        class="utility-action">
+                    </lightning-button>
+                </div>
+            </template>
+            
+            <!-- Show Release button above card when HAS assignments -->
+            <template if:true={hasAssignments}>
+                <div class="button-wrapper">
+                    <lightning-button 
+                        variant="destructive-text" 
+                        label={releaseButtonLabel}
+                        icon-name="utility:unlock"
+                        onclick={handleReleaseAssignments}
+                        disabled={isReleaseButtonDisabled}
+                        class="utility-action release-button">
+                    </lightning-button>
+                </div>
+                
+                <div class="utility-card assigned-card">
+                    <div class="assigned-record-name">{assignedRecordDisplayName}</div>
+                    <div class="assigned-record-status" if:true={assignedRecordStatus}>
+                        {assignedRecordStatus}
+                    </div>
+                    <div class="assigned-timer">{assignedRecordTimer}</div>
+                </div>
+            </template>
+        </div>
+    </template>
+    
+    <!-- Existing Full Interface -->
+    <template if:false={showUtilityInterface}>
+    <lightning-card>
+        
+        <!-- Statistics Dashboard -->
+        <div class="stats-container">
+            <div onclick={handleTotalTileClick} class={allLeadsClass}>
+                <div class="stat-number">{originalStats.totalRecords}</div>
+                <div class="stat-label">All Leads</div>
+            </div>
+            <div class="stat-card high-priority-stat" onclick={handleTileClick} data-filter="highPriority">
+                <div class="stat-number">{originalStats.highPriorityCount}</div>
+                <div class="stat-label">High Priority</div>
+            </div>
+            <div class="stat-card in-contact-stat" onclick={handleTileClick} data-filter="inContact">
+                <div class="stat-number">{originalStats.inContactCount}</div>
+                <div class="stat-label">In Contact</div>
+            </div>
+            <div class="stat-card no-contact-stat" onclick={handleTileClick} data-filter="noContact">
+                <div class="stat-number">{originalStats.noContactCount}</div>
+                <div class="stat-label">No Contact</div>
+            </div>
+            <div class="stat-card retainer-sent-stat" onclick={handleTileClick} data-filter="retainerSent">
+                <div class="stat-number">{originalStats.retainerSentCount}</div>
+                <div class="stat-label">Retainer Sent</div>
+            </div>
+        </div>
+        
+        <!-- Action Bar -->
+        <div class="action-bar">
+            <lightning-button 
+                variant="brand" 
+                label={assignButtonLabel}
+                icon-name="utility:chevronright"
+                onclick={handleAssignNext}
+                disabled={isAssignButtonDisabled}
+                class="primary-action">
+            </lightning-button>
+            
+            <lightning-button 
+                if:true={hasAssignments}
+                variant="destructive-text" 
+                label={releaseButtonLabel}
+                icon-name="utility:unlock"
+                onclick={handleReleaseAssignments}
+                disabled={isReleaseButtonDisabled}>
+            </lightning-button>
+            
+            <lightning-button-group class="view-selector">
+                <lightning-button 
+                    label="Ready to Call" 
+                    onclick={showReadyToCalls}
+                    variant={readyToCallVariant}
+                    class="view-button">
+                </lightning-button>
+                <lightning-button 
+                    label="Scheduled Calls" 
+                    onclick={showScheduledCallsView}
+                    variant={scheduledCallsVariant}
+                    class="view-button">
+                </lightning-button>
+            </lightning-button-group>
+            
+            <lightning-button
+                variant="neutral"
+                icon-name="utility:refresh"
+                title="Refresh Lead Queue"
+                onclick={handleRefresh}
+                disabled={isLoading}
+                class="refresh-btn">
+            </lightning-button>
+        </div>
+        
+        <!-- Filters -->
+        <div class="filter-section">
+            <lightning-combobox
+                name="status"
+                placeholder="All Statuses"
+                label="Status"
+                value={statusFilter}
+                options={filterOptions.statusOptions}
+                onchange={handleFilterChange}
+                aria-describedby="status-filter-help">
+            </lightning-combobox>
+            <div id="status-filter-help" class="slds-assistive-text">
+                Filter records by intake status
+            </div>
+            
+            <lightning-combobox
+                name="caseType"
+                placeholder="All Case Types"
+                label="Case Type"
+                value={caseTypeFilter}
+                options={filterOptions.caseTypeOptions}
+                onchange={handleFilterChange}
+                aria-describedby="case-type-filter-help">
+            </lightning-combobox>
+            <div id="case-type-filter-help" class="slds-assistive-text">
+                Filter records by case type
+            </div>
+            
+            <lightning-combobox
+                name="dueDate"
+                placeholder="All Dates"
+                label="Due Date"
+                value={dueDateFilter}
+                options={dueDateOptions}
+                onchange={handleFilterChange}
+                aria-describedby="due-date-filter-help">
+            </lightning-combobox>
+            <div id="due-date-filter-help" class="slds-assistive-text">
+                Filter records by due date range
+            </div>
+            
+            <lightning-button 
+                variant="neutral" 
+                label="Clear" 
+                onclick={handleClearFilters}
+                class="clear-btn">
+            </lightning-button>
+        </div>
+        
+        <!-- Lead Queue Table -->
+        <template if:true={isLoading}>
+            <div class="loading-container">
+                <lightning-spinner alternative-text="Loading lead queue..." size="medium"></lightning-spinner>
+            </div>
+        </template>
+        
+        <template if:false={isLoading}>
+            <template if:true={hasRecords}>
+                <div class="table-container">
+                    <lightning-datatable
+                        key-field="Id"
+                        data={records}
+                        columns={tableColumns}
+                        hide-checkbox-column
+                        onrowaction={handleRowAction}
+                        disable-inline-edit
+                        suppress-bottom-bar
+                        wrap-text-header="false">
+                    </lightning-datatable>
+                </div>
+            </template>
+            
+            <template if:false={hasRecords}>
+                <div class="empty-state">
+                    <lightning-icon icon-name="utility:events" size="large"></lightning-icon>
+                    <h3>Lead queue is empty</h3>
+                    <p>No records match the current filter criteria.</p>
+                </div>
+            </template>
+        </template>
+        
+    </lightning-card>
+    </template>
+</template>

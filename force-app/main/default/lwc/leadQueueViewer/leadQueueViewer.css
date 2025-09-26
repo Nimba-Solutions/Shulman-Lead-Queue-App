@@ -1,0 +1,305 @@
+/* Utility Bar Compact Interface */
+.utility-container {
+    display: flex;
+    flex-direction: column;
+    padding: 4px;
+    align-items: center;
+    justify-content: center;
+    min-height: 60px;
+    gap: 2px;
+    pointer-events: none;
+}
+
+/* Card-based layout with subtle borders and shadows */
+.utility-card {
+    background: #ffffff;
+    border: 1px solid #e5e5e5;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    padding: 8px;
+    width: calc(100% - 16px);
+    max-width: 300px;
+    transition: box-shadow 0.2s ease;
+    pointer-events: none;
+    margin: 2px;
+}
+
+.utility-card:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.assigned-card {
+    background: #f8f9fa;
+    border-color: #d1ecf1;
+}
+
+/* Record name styling - matches Salesforce standard record text */
+.assigned-record-name {
+    font-size: 0.8125rem;
+    font-weight: 400;
+    color: #0176d3;
+    text-align: left;
+    margin: 4px 0 6px 0;
+    overflow: visible;
+    white-space: normal;
+    word-wrap: break-word;
+    line-height: 1.25;
+    text-decoration: none;
+}
+
+/* Status text styling */
+.assigned-record-status {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #3e3e3c;
+    text-align: left;
+    margin: 0 0 6px 0;
+}
+
+/* Timer display */
+.assigned-timer {
+    font-size: 0.75rem;
+    color: #706e6b;
+    text-align: left;
+    margin: 0;
+    font-weight: 400;
+}
+
+/* Button wrapper to control clickable area */
+.button-wrapper {
+    width: calc(100% - 8px);
+    margin: 2px;
+    pointer-events: none;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Button styling - restored functional CSS */
+.utility-action {
+    font-size: 12px;
+    min-height: 32px;
+    width: 100%;
+    padding: 8px 8px;
+    pointer-events: auto;
+    box-sizing: border-box;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.release-button {
+    margin-bottom: 4px;
+}
+
+/* Compact button sizing for utility bar */
+.utility-container lightning-button {
+    --slds-c-button-sizing-border: 1px;
+    --slds-c-button-font-size: 0.75rem;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    overflow: hidden !important;
+}
+
+/* Badge styling adjustments */
+.utility-card lightning-badge {
+    --sds-c-badge-font-size: 0.625rem;
+}
+
+/* Statistics Dashboard */
+.stats-container {
+    display: -ms-grid;
+    display: grid;
+    -ms-grid-columns: 1fr 1rem 1fr 1rem 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    padding: 1rem;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.stat-card {
+    background: white;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.stat-card:hover,
+.stat-card:focus {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    outline: none;
+}
+
+.stat-card:focus {
+    border-color: #0176d3;
+}
+
+.stat-number {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #0176d3;
+    line-height: 1;
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    color: #706e6b;
+    margin-top: 0.25rem;
+}
+
+/* Stat color variants */
+.high-priority-stat .stat-number { color: #e74c3c; }
+.in-contact-stat .stat-number { color: #28a745; }
+.no-contact-stat .stat-number { color: #f39c12; }
+.retainer-sent-stat .stat-number { color: #6f42c1; }
+
+/* Action Bar */
+.action-bar {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 1rem;
+    border-bottom: 1px solid #e5e5e5;
+    flex-wrap: wrap;
+}
+
+.primary-action {
+    order: -1;
+}
+
+.view-selector {
+    margin-left: auto;
+    margin-right: 0.75rem;
+}
+
+.refresh-btn {
+    margin-left: 0;
+}
+
+/* Filter Section */
+.filter-section {
+    display: -ms-grid;
+    display: grid;
+    -ms-grid-columns: 1fr 1rem 1fr 1rem 1fr 1rem auto;
+    grid-template-columns: 1fr 1fr 1fr auto;
+    gap: 1rem;
+    padding: 1rem;
+    background: #fafafa;
+    -ms-grid-row-align: end;
+    align-items: end;
+}
+
+.clear-btn {
+    align-self: end;
+}
+
+/* Table Container */
+.table-container {
+    border-top: 1px solid #e5e5e5;
+}
+
+/* Loading State */
+.loading-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 3rem;
+}
+
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: #706e6b;
+}
+
+.empty-state lightning-icon {
+    margin-bottom: 1rem;
+    opacity: 0.6;
+}
+
+.empty-state h3 {
+    font-size: 1.25rem;
+    margin-bottom: 0.5rem;
+    color: #3e3e3c;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .stats-container { 
+        -ms-grid-columns: 1fr 1rem 1fr;
+        grid-template-columns: repeat(2, 1fr); 
+    }
+    .filter-section { 
+        -ms-grid-columns: 1fr;
+        grid-template-columns: 1fr; 
+        gap: 0.75rem; 
+    }
+    .action-bar { 
+        flex-direction: column; 
+        align-items: stretch; 
+    }
+    .refresh-btn { 
+        margin-left: 0; 
+        align-self: center; 
+    }
+}
+
+@media (max-width: 480px) {
+    .stats-container { 
+        -ms-grid-columns: 1fr;
+        grid-template-columns: 1fr; 
+    }
+    .stat-card { padding: 0.75rem; }
+    .stat-number { font-size: 1.5rem; }
+}
+
+/* Active tile filter styling */
+.stat-card.active-filter {
+    background-color: #e6f3ff;
+    border-color: #0176d3;
+    box-shadow: 0 2px 8px rgba(1, 118, 211, 0.3);
+}
+
+/* URL link styling for Name column */
+lightning-datatable .name-url-cell a {
+    color: #0176d3;
+    text-decoration: underline;
+}
+
+lightning-datatable .name-url-cell a:hover,
+lightning-datatable .name-url-cell a:focus {
+    color: #014486;
+    outline: 2px solid #0176d3;
+    outline-offset: 2px;
+}
+
+/* Control text wrapping in datatable cells with hover tooltip support */
+lightning-datatable tbody tr td,
+lightning-datatable tbody tr th {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+    position: relative;
+}
+
+/* Show full text on hover for better UX */
+lightning-datatable tbody tr td:hover,
+lightning-datatable tbody tr th:hover {
+    overflow: visible;
+    white-space: normal;
+    word-wrap: break-word;
+    background-color: #fafafa;
+    z-index: 10;
+    border: 1px solid #e5e5e5;
+    padding: 0.5rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}

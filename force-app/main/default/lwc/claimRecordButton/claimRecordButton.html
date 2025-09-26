@@ -1,0 +1,51 @@
+<template>
+    <lightning-card title="Lead Queue Assignment">
+        <div class="slds-p-horizontal_small">
+            
+            <!-- Show Claim Record button when user has NO assignments -->
+            <template if:true={canClaimThisRecord}>
+                <lightning-button 
+                    variant="brand" 
+                    label={claimButtonLabel}
+                    icon-name="utility:user"
+                    onclick={handleClaimRecord}
+                    disabled={isClaimButtonDisabled}
+                    class="claim-button">
+                </lightning-button>
+            </template>
+            
+            <!-- Show Release Record button when THIS record is claimed -->
+            <template if:true={isCurrentRecordClaimed}>
+                <lightning-button 
+                    variant="destructive-text" 
+                    label={releaseButtonLabel}
+                    icon-name="utility:unlock"
+                    onclick={handleReleaseRecord}
+                    disabled={isReleaseButtonDisabled}
+                    class="claim-button release-button">
+                </lightning-button>
+            </template>
+
+            <!-- Show warning when user has DIFFERENT record claimed -->
+            <template if:true={hasOtherRecordClaimed}>
+                <div class="other-record-claimed">
+                    <lightning-icon icon-name="utility:warning" size="small" variant="warning"></lightning-icon>
+                    <div class="warning-text">
+                        You already have an Intake claimed. Please release the record first before claiming a new one.
+                    </div>
+                </div>
+            </template>
+            
+            <template if:true={showSuccess}>
+                <div class="slds-text-color_success slds-m-top_x-small">
+                    <template if:true={isCurrentRecordClaimed}>
+                        Record claimed successfully!
+                    </template>
+                    <template if:false={isCurrentRecordClaimed}>
+                        Record released successfully!
+                    </template>
+                </div>
+            </template>
+        </div>
+    </lightning-card>
+</template>
