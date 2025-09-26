@@ -3,10 +3,10 @@
         {
             "path": "force-app",
             "default": true,
-            "package": "Shulman-Lead-Queue-App",
+            "package": "Shulman_Lead_Queue_App",
             "versionName": "ver 1.0",
             "versionNumber": "1.0.0.NEXT",
-            "versionDescription": "Initial version of the Shulman-Lead-Queue-App Package"
+            "versionDescription": "Initial version of the Shulman_Lead_Queue_App Package"
         },
         {
             "path": "unpackaged"
