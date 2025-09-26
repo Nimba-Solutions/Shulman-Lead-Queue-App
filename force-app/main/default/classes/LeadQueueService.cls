@@ -24,7 +24,7 @@ public with sharing class LeadQueueService {
     private static final Integer MEDIUM_PRIORITY_THRESHOLD = 55;
     private static final String BASE_WHERE_CLAUSE = '(Test_Record__c = false OR Test_Record__c = null) AND Call_at_Date__c <= :now AND Type__c IN (\'Worker Compensation\', \'Personal Injury\') AND (litify_pm__Status__c IN (\'Lead Generated\', \'In Contact/Under Review\', \'Missed Appointment\', \'Intake Package Sent\', \'Attempting to Contact\', \'Questionnaire\') OR (litify_pm__Status__c = \'Intake Scheduled\' AND (litify_pm__Sign_Up_Method__c = \'E-Sign\' OR (litify_pm__Sign_Up_Method__c = \'Office\' AND Call_at_Date__c <= :twoHoursFromNow))))';
     private static final String BASE_ORDER_BY = 'ORDER BY Priority_Score__c ASC, Call_at_Date__c ASC';
-    private static final String REQUIRED_FIELDS = 'Id, Name, litify_pm__Display_Name__c, Referred_By_Name__c, litify_pm__Status__c, Priority_Score__c, CreatedDate, Case_Type_Reporting__c, Type__c, Call_at_Date__c, litify_pm__Phone__c, litify_pm__Sign_Up_Method__c, Test_Record__c';
+    private static final String REQUIRED_FIELDS = 'Id, Name, litify_pm__Display_Name__c, Referred_By_Name__c, litify_pm__Status__c, Priority_Score__c, CreatedDate, Case_Type_Reporting__c, Type__c, Call_at_Date__c, litify_pm__Phone__c, litify_pm__Sign_Up_Method__c, Test_Record__c, Qualification_Status__c';
     private static final String ASSIGNMENT_CACHE_PREFIX = 'assign';
     private static final String USER_CACHE_PREFIX = 'user';
     
@@ -468,7 +468,7 @@ public with sharing class LeadQueueService {
     private static void validateFieldAccess() {
         try {
             Map<String, Schema.SObjectField> fieldMap = Schema.sObjectType.litify_pm__Intake__c.fields.getMap();
-            List<String> fields = new List<String>{'litify_pm__Status__c', 'Case_Type_Reporting__c', 'Call_at_Date__c', 'litify_pm__Phone__c', 'Priority_Score__c'};
+            List<String> fields = new List<String>{'litify_pm__Status__c', 'Case_Type_Reporting__c', 'Call_at_Date__c', 'litify_pm__Phone__c', 'Priority_Score__c', 'Qualification_Status__c'};
             
             for (String field : fields) {
                 Boolean fieldExists = fieldMap.containsKey(field);

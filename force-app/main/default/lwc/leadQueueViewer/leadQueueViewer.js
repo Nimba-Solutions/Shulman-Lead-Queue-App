@@ -105,6 +105,11 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
                 type: 'text',
             },
             {
+                label: 'Qualification Status',
+                fieldName: 'QualificationStatus',
+                type: 'text',
+            },
+            {
                 label: 'Call Date and Time',
                 fieldName: 'callDateTime',
                 type: 'text',
@@ -120,6 +125,12 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
                 label: 'Currently Assigned',
                 fieldName: 'assignedTo',
                 type: 'text',
+            },
+            {
+                label: 'Timer',
+                fieldName: 'assignmentTimer',
+                type: 'text',
+                initialWidth: 120
             },
             {
                 type: 'action',
@@ -316,6 +327,8 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         // Start live timer updates
         this.timerInterval = setInterval(() => {
             this.currentTime = new Date();
+            // Force re-render of table to update timers
+            this.refreshTableTimers();
         }, 1000); // Update every second
     }
 
@@ -348,6 +361,10 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         if (this.filterTimeout) {
             clearTimeout(this.filterTimeout);
             this.filterTimeout = null;
+        }
+        if (this.timerInterval) {
+            clearInterval(this.timerInterval);
+            this.timerInterval = null;
         }
         
         // Enhanced cleanup to prevent memory leaks
@@ -400,9 +417,11 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
                     Referred_By_Name__c: record.Referred_By_Name__c || '',
                     Status: record.litify_pm__Status__c || '',
                     CaseType: record.Case_Type_Reporting__c || '',
+                    QualificationStatus: record.Qualification_Status__c || '',
                     callDateTime: this.formatCallDateTime(record.Call_at_Date__c),
                     Phone: record.litify_pm__Phone__c || '',
                     assignedTo: queueRecord.assignedTo || '',
+                    assignmentTimer: this.getRecordAssignmentTimer(originalRecordId, queueRecord.assignedTo),
                     priorityRank: index + 1,
                     recordUrl: `/lightning/r/litify_pm__Intake__c/${originalRecordId}/view`,
                 };
@@ -940,6 +959,54 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
             sessionStorage.removeItem(cacheKey);
         } catch (error) {
             console.log('Could not clear assignment timestamp:', error);
+        }
+    }
+
+    getRecordAssignmentTimer(recordId, assignedTo) {
+        // Only show timer if record is assigned and to current user
+        if (!assignedTo) {
+            return '';
+        }
+        
+        // Check if this record is assigned to the current user
+        const userId = this.currentUserId || '$User.Id';
+        const cacheKey = `assignment_${userId}`;
+        
+        try {
+            const assignmentData = sessionStorage.getItem(cacheKey);
+            if (assignmentData) {
+                const parsedData = JSON.parse(assignmentData);
+                if (parsedData.recordId === recordId && parsedData.assignedAt) {
+                    const assignedTime = new Date(parsedData.assignedAt);
+                    const diffMs = this.currentTime - assignedTime;
+                    const totalSeconds = Math.floor(diffMs / 1000);
+                    
+                    const minutes = Math.floor(totalSeconds / 60);
+                    const seconds = totalSeconds % 60;
+                    
+                    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                }
+            }
+        } catch (error) {
+            console.log('Could not parse assignment timestamp for record:', error);
+        }
+        
+        // For records assigned to other users, show assigned status
+        return assignedTo ? 'Assigned' : '';
+    }
+
+    refreshTableTimers() {
+        // Update timer values in the records array
+        if (this.records && this.records.length > 0) {
+            this.records = this.records.map(record => {
+                const originalRecordId = record.Id.endsWith('-assigned') 
+                    ? record.Id.slice(0, -9) 
+                    : record.Id;
+                return {
+                    ...record,
+                    assignmentTimer: this.getRecordAssignmentTimer(originalRecordId, record.assignedTo)
+                };
+            });
         }
     }
 
