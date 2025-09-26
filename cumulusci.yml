@@ -2,7 +2,7 @@ minimum_cumulusci_version: "3.78.0"
 project:
     name: Shulman Lead Queue App
     package:
-        name: Shulman-Lead-Queue-App
+        name: Shulman_Lead_Queue_App
         name_managed: Shulman Lead Queue App
         api_version: "61.0"
     dependencies:
