@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Case_Type__c</fullName>
+    <label>Case Type</label>
+    <required>false</required>
+    <trackFeedHistory>false</trackFeedHistory>
+    <trackHistory>false</trackHistory>
+    <trackTrending>false</trackTrending>
+    <type>Picklist</type>
+    <valueSet>
+        <controllingField>Type__c</controllingField>
+        <restricted>true</restricted>
+        <valueSetName>Case_Types</valueSetName>
+        <valueSettings>
+            <controllingFieldValue>Civil Rights</controllingFieldValue>
+            <valueName>PAC</valueName>
+        </valueSettings>
+        <valueSettings>
+            <controllingFieldValue>Civil Rights</controllingFieldValue>
+            <valueName>Rikers</valueName>
+        </valueSettings>
+        <valueSettings>
+            <controllingFieldValue>Civil Rights</controllingFieldValue>
+            <valueName>Wrongful Conviction</valueName>
+        </valueSettings>
+        <valueSettings>
+            <controllingFieldValue>Civil Rights</controllingFieldValue>
+            <valueName>DOCCS-State</valueName>
+        </valueSettings>
+        <valueSettings>
+            <controllingFieldValue>Civil Rights</controllingFieldValue>
+            <valueName>Federal Prison</valueName>
+        </valueSettings>
+        <valueSettings>
+            <controllingFieldValue>Civil Rights</controllingFieldValue>
+            <valueName>County/City Jail (Not RIkers)</valueName>
+        </valueSettings>
+        <valueSettings>
+            <controllingFieldValue>Civil Rights</controllingFieldValue>
+            <valueName>ASA</valueName>
+        </valueSettings>
+        <valueSettings>
+            <controllingFieldValue>Civil Rights</controllingFieldValue>
+            <valueName>Sexual Assault</valueName>
+        </valueSettings>
+        <valueSettings>
+            <controllingFieldValue>WC &amp; PI</controllingFieldValue>
+            <controllingFieldValue>Personal Injury</controllingFieldValue>
+            <valueName>Labor Law</valueName>
+        </valueSettings>
+        <valueSettings>
+            <controllingFieldValue>WC &amp; PI</controllingFieldValue>
+            <controllingFieldValue>Personal Injury</controllingFieldValue>
+            <valueName>Premises</valueName>
+        </valueSettings>
+        <valueSettings>
+            <controllingFieldValue>WC &amp; PI</controllingFieldValue>
+            <controllingFieldValue>Personal Injury</controllingFieldValue>
+            <valueName>MVA</valueName>
+        </valueSettings>
+    </valueSet>
+</CustomField>

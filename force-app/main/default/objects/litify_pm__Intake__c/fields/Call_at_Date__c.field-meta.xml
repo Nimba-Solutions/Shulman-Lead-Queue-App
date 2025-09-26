@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Call_at_Date__c</fullName>
+    <formula>IF(
+  NOT(ISBLANK(Appointment_Date__c)) &amp;&amp; NOT(ISBLANK(Follow_Up_Date_Time__c)),
+  IF(
+    Appointment_Date__c &gt;= Follow_Up_Date_Time__c,
+    Appointment_Date__c,
+    Follow_Up_Date_Time__c
+  ),
+  IF(
+    NOT(ISBLANK(Appointment_Date__c)),
+    Appointment_Date__c,
+    IF(
+      NOT(ISBLANK(Follow_Up_Date_Time__c)),
+      Follow_Up_Date_Time__c,
+      CreatedDate
+    )
+  )
+)</formula>
+    <formulaTreatBlanksAs>BlankAsZero</formulaTreatBlanksAs>
+    <label>Call at Date</label>
+    <required>false</required>
+    <trackHistory>false</trackHistory>
+    <trackTrending>false</trackTrending>
+    <type>DateTime</type>
+</CustomField>

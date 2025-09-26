@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Priority_Score__c</fullName>
+    <externalId>false</externalId>
+    <formula>(CASE(litify_pm__Status__c, 
+         &apos;Lead Generated&apos;, 1,
+         &apos;Intake Scheduled&apos;, 2, 
+         &apos;In Contact/Under Review&apos;, 3,
+         &apos;Missed Appointment&apos;, 4,
+         &apos;Intake Package Sent&apos;, 5,
+         &apos;Attempting to Contact&apos;, 6,
+         &apos;Questionnaire&apos;, 7,
+         99) * 10) + 
+       CASE(Case_Type_Reporting__c,
+         &apos;Labor Law&apos;, 1,
+         &apos;MVA&apos;, 2,
+         &apos;Premises&apos;, 3,
+         &apos;WC &amp; PI&apos;, 4,
+         &apos;Personal Injury&apos;, 5,
+         &apos;Worker Compensation&apos;, 6,
+         7)</formula>
+    <formulaTreatBlanksAs>BlankAsZero</formulaTreatBlanksAs>
+    <label>Priority Score</label>
+    <precision>18</precision>
+    <required>false</required>
+    <scale>0</scale>
+    <trackHistory>false</trackHistory>
+    <trackTrending>false</trackTrending>
+    <type>Number</type>
+    <unique>false</unique>
+</CustomField>
