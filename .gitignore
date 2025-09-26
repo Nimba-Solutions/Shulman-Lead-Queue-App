@@ -3,6 +3,10 @@
 /src.orig
 /src
 
+# Claude
+.claude/
+CLAUDE.md
+
 # Python
 *.pyc
 __pycache__
