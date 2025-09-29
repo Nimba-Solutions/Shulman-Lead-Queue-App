@@ -16,6 +16,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     
     // Utility bar mode support
     @api utilityMode = false;
+    @api label = 'Lead Queue';
     statusFilter = '';
     caseTypeFilter = '';
     dueDateFilter = '';

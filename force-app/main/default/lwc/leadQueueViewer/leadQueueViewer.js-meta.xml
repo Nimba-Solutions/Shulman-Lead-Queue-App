@@ -19,6 +19,7 @@
         </targetConfig>
         <targetConfig targets="lightning__UtilityBar">
             <property name="utilityMode" type="Boolean" default="true" />
+            <property name="label" type="String" default="Lead Queue" />
         </targetConfig>
     </targetConfigs>
 </LightningComponentBundle>

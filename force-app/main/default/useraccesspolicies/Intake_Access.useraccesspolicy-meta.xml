@@ -18,7 +18,7 @@
     <userAccessPolicyFilters>
         <operation>in</operation>
         <sortOrder>1</sortOrder>
-        <target>admin,s&amp;h - intake - coordinator,s&amp;h - intake - manager,s&amp;h - intake - virtual assistant</target>
+        <target>admin</target>
         <type>Profile</type>
     </userAccessPolicyFilters>
     <userAccessPolicyFilters>
