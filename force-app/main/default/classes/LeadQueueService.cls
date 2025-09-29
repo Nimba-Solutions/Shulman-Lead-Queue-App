@@ -234,8 +234,11 @@ public with sharing class LeadQueueService {
                 // Standard statuses: show if Call_at_Date__c <= now
                 '(litify_pm__Status__c IN (\'Lead Generated\', \'In Contact/Under Review\', \'Missed Appointment\', \'Intake Package Sent\', \'Attempting to Contact\') AND Call_at_Date__c <= :now)' +
                 ' OR ' +
-                // Questionnaire/Intake Scheduled: show only if Call_at_Date__c <= 4 hours ago (exclude recent)
-                '((litify_pm__Status__c = \'Questionnaire\' OR (litify_pm__Status__c = \'Intake Scheduled\' AND (litify_pm__Sign_Up_Method__c = \'E-Sign\' OR (litify_pm__Sign_Up_Method__c = \'Office\' AND Call_at_Date__c <= :twoHoursFromNow)))) AND Call_at_Date__c <= :fourHoursAgo)' +
+                // Questionnaire: show only if Call_at_Date__c <= 4 hours ago (exclude recent)
+                '(litify_pm__Status__c = \'Questionnaire\' AND Call_at_Date__c <= :fourHoursAgo)' +
+                ' OR ' +
+                // Intake Scheduled: no 4-hour restriction
+                '(litify_pm__Status__c = \'Intake Scheduled\' AND (litify_pm__Sign_Up_Method__c = \'E-Sign\' OR (litify_pm__Sign_Up_Method__c = \'Office\' AND Call_at_Date__c <= :twoHoursFromNow)))' +
                 ')';
             
             String whereClause = baseConditions + ' AND ' + complexCondition;

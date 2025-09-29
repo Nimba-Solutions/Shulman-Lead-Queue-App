@@ -813,13 +813,12 @@ private class LeadQueueServiceTest {
         Assert.isNotNull(readyResponse, 'Ready to call response should not be null');
         Assert.isNotNull(scheduledResponse, 'Scheduled calls response should not be null');
         
-        // Verify Ready to Call mode excludes recent Questionnaire/Intake Scheduled records
+        // Verify Ready to Call mode excludes recent Questionnaire records (4-hour rule)
         for (LeadQueueService.QueueRecord qr : readyResponse.records) {
-            if (qr.record.litify_pm__Status__c == 'Questionnaire' || 
-                qr.record.litify_pm__Status__c == 'Intake Scheduled') {
-                // These should only appear if more than 4 hours old
+            if (qr.record.litify_pm__Status__c == 'Questionnaire') {
+                // Questionnaire should only appear if more than 4 hours old
                 Assert.isTrue(qr.record.Call_at_Date__c <= DateTime.now().addHours(-4),
-                             'Ready to Call should only show Questionnaire/Intake Scheduled records >4 hours old');
+                             'Ready to Call should only show Questionnaire records >4 hours old');
             }
         }
         
@@ -829,7 +828,7 @@ private class LeadQueueServiceTest {
     @IsTest
     static void testComplexStatusTimeFiltering() {
         // Test that standard statuses use regular time filtering while 
-        // Questionnaire/Intake Scheduled use 4-hour filtering
+        // Questionnaire uses 4-hour filtering
         Test.startTest();
         
         LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
@@ -845,10 +844,10 @@ private class LeadQueueServiceTest {
                              'Standard statuses should use regular time criteria');
             }
             
-            if (status == 'Questionnaire' || status == 'Intake Scheduled') {
-                // These statuses should use 4-hour filtering (Call_at_Date__c <= 4 hours ago)
+            if (status == 'Questionnaire') {
+                // Questionnaire status should use 4-hour filtering (Call_at_Date__c <= 4 hours ago)
                 Assert.isTrue(qr.record.Call_at_Date__c <= DateTime.now().addHours(-4),
-                             'Questionnaire/Intake Scheduled should use 4-hour filtering');
+                             'Questionnaire should use 4-hour filtering');
             }
         }
         
