@@ -4,6 +4,10 @@
     <flexiPageRegions>
         <itemInstances>
             <componentInstance>
+                <componentInstanceProperties>
+                    <name>utilityMode</name>
+                    <value>false</value>
+                </componentInstanceProperties>
                 <componentName>leadQueueViewer</componentName>
                 <identifier>c_leadQueueViewer</identifier>
             </componentInstance>
