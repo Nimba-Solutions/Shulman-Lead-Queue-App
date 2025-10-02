@@ -18,7 +18,8 @@
          &apos;WC &amp; PI&apos;, 4,
          &apos;Personal Injury&apos;, 5,
          &apos;Worker Compensation&apos;, 6,
-         7)</formula>
+         &apos;Other&apos;, 7,
+         8)</formula>
     <formulaTreatBlanksAs>BlankAsZero</formulaTreatBlanksAs>
     <label>Priority Score</label>
     <precision>18</precision>

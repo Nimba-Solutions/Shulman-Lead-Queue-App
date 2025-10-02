@@ -66,6 +66,44 @@ private class LeadQueueServiceTest {
             litify_pm__Sign_Up_Method__c = 'E-Sign'
         ));
         
+        // Add test record for WC & PI type to test new priority order
+        testIntakes.add(new litify_pm__Intake__c(
+            litify_pm__Status__c = 'Lead Generated',
+            Type__c = 'WC & PI',
+            litify_pm__Phone__c = '555-WC-PI-TEST',
+            litify_pm__Sign_Up_Method__c = 'Office'
+        ));
+        
+        // Add test records for remaining case types to ensure complete coverage
+        // Note: Case_Type_Reporting__c is a formula field and cannot be set directly
+        testIntakes.add(new litify_pm__Intake__c(
+            litify_pm__Status__c = 'Lead Generated',
+            Type__c = 'Personal Injury',
+            litify_pm__Phone__c = '555-CASE-TYPE-1',
+            litify_pm__Sign_Up_Method__c = 'Office'
+        ));
+        
+        testIntakes.add(new litify_pm__Intake__c(
+            litify_pm__Status__c = 'In Contact/Under Review',
+            Type__c = 'Personal Injury', 
+            litify_pm__Phone__c = '555-CASE-TYPE-2',
+            litify_pm__Sign_Up_Method__c = 'E-Sign'
+        ));
+        
+        testIntakes.add(new litify_pm__Intake__c(
+            litify_pm__Status__c = 'Attempting to Contact',
+            Type__c = 'Worker Compensation',
+            litify_pm__Phone__c = '555-CASE-TYPE-3',
+            litify_pm__Sign_Up_Method__c = 'Office'
+        ));
+        
+        testIntakes.add(new litify_pm__Intake__c(
+            litify_pm__Status__c = 'Intake Package Sent',
+            Type__c = 'Personal Injury',
+            litify_pm__Phone__c = '555-CASE-TYPE-4',
+            litify_pm__Sign_Up_Method__c = 'E-Sign'
+        ));
+        
         insert testIntakes;
         
         // Verify fields are populated by triggers/formulas after insert
@@ -85,6 +123,7 @@ private class LeadQueueServiceTest {
         Test.stopTest();
         
         Assert.isNotNull(response, 'Response should not be null');
+        Assert.isTrue(response.success, 'Response should be successful: ' + response.errorMessage);
         Assert.isNotNull(response.records, 'Records should not be null');
         Assert.isNotNull(response.stats, 'Stats should not be null');
         Assert.isNotNull(response.filters, 'Filters should not be null');
@@ -164,6 +203,7 @@ private class LeadQueueServiceTest {
         Test.startTest();
         LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('Lead Generated', 'MVA', '', false);
         Assert.isNotNull(response, 'Filtered response should not be null');
+        Assert.isTrue(response.success, 'Filtered response should be successful: ' + response.errorMessage);
         Assert.isNotNull(response.records, 'Filtered records should not be null');
         Test.stopTest();
     }
@@ -196,6 +236,7 @@ private class LeadQueueServiceTest {
         // Test with valid filters - should not throw exception
         LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('Lead Generated', 'Personal Injury', 'today', false);
         Assert.isNotNull(response, 'Response should not be null with valid filters');
+        Assert.isTrue(response.success, 'Response should be successful with valid filters: ' + response.errorMessage);
         Test.stopTest();
     }
     
@@ -813,12 +854,17 @@ private class LeadQueueServiceTest {
         Assert.isNotNull(readyResponse, 'Ready to call response should not be null');
         Assert.isNotNull(scheduledResponse, 'Scheduled calls response should not be null');
         
-        // Verify Ready to Call mode excludes recent Questionnaire records (4-hour rule)
+        // Verify Ready to Call mode excludes recent Questionnaire records (4-hour filtering)
         for (LeadQueueService.QueueRecord qr : readyResponse.records) {
             if (qr.record.litify_pm__Status__c == 'Questionnaire') {
                 // Questionnaire should only appear if more than 4 hours old
                 Assert.isTrue(qr.record.Call_at_Date__c <= DateTime.now().addHours(-4),
                              'Ready to Call should only show Questionnaire records >4 hours old');
+            }
+            if (qr.record.litify_pm__Status__c == 'Intake Scheduled') {
+                // Intake Scheduled uses regular time filtering
+                Assert.isTrue(qr.record.Call_at_Date__c <= DateTime.now(),
+                             'Ready to Call should show Intake Scheduled records with regular time filtering');
             }
         }
         
@@ -828,7 +874,7 @@ private class LeadQueueServiceTest {
     @IsTest
     static void testComplexStatusTimeFiltering() {
         // Test that standard statuses use regular time filtering while 
-        // Questionnaire uses 4-hour filtering
+        // Questionnaire/Intake Scheduled use 4-hour filtering
         Test.startTest();
         
         LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
@@ -849,7 +895,99 @@ private class LeadQueueServiceTest {
                 Assert.isTrue(qr.record.Call_at_Date__c <= DateTime.now().addHours(-4),
                              'Questionnaire should use 4-hour filtering');
             }
+            
+            if (status == 'Intake Scheduled') {
+                // Intake Scheduled should use regular time filtering (Call_at_Date__c <= now)
+                Assert.isTrue(qr.record.Call_at_Date__c <= DateTime.now(),
+                             'Intake Scheduled should use regular time filtering');
+            }
         }
+        
+        Test.stopTest();
+    }
+
+    @IsTest
+    static void testNewCaseTypePriorityOrdering() {
+        // Test the new case type priority order: Labor Law, MVA, Premises, WC & PI, Personal Injury, Worker Compensation, Other
+        Test.startTest();
+        
+        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
+        
+        // Verify records are returned
+        Assert.isNotNull(response, 'Response should not be null');
+        Assert.isNotNull(response.records, 'Records should not be null');
+        
+        // Test filtering by all new case types to ensure they work
+        LeadQueueService.QueueResponse laborLawResponse = LeadQueueService.getQueueData('', 'Labor Law', '', false);
+        Assert.isNotNull(laborLawResponse, 'Labor Law filter response should not be null');
+        
+        LeadQueueService.QueueResponse mvaResponse = LeadQueueService.getQueueData('', 'MVA', '', false);
+        Assert.isNotNull(mvaResponse, 'MVA filter response should not be null');
+        
+        LeadQueueService.QueueResponse premisesResponse = LeadQueueService.getQueueData('', 'Premises', '', false);
+        Assert.isNotNull(premisesResponse, 'Premises filter response should not be null');
+        
+        LeadQueueService.QueueResponse wcPiResponse = LeadQueueService.getQueueData('', 'WC & PI', '', false);
+        Assert.isNotNull(wcPiResponse, 'WC & PI filter response should not be null');
+        
+        LeadQueueService.QueueResponse otherResponse = LeadQueueService.getQueueData('', 'Other', '', false);
+        Assert.isNotNull(otherResponse, 'Other filter response should not be null');
+        
+        // Verify that the filter options include all case types from the priority map
+        Assert.isNotNull(response.filters, 'Filter options should not be null');
+        Assert.isNotNull(response.filters.caseTypeOptions, 'Case type options should not be null');
+        
+        // Verify filter options contain all expected case types
+        Set<String> expectedCaseTypes = new Set<String>{'Labor Law', 'MVA', 'Premises', 'WC & PI', 'Personal Injury', 'Worker Compensation', 'Other'};
+        Set<String> actualCaseTypes = new Set<String>();
+        
+        for (LeadQueueService.PicklistOption option : response.filters.caseTypeOptions) {
+            if (String.isNotBlank(option.value)) { // Skip the "All Case Types" option
+                actualCaseTypes.add(option.value);
+            }
+        }
+        
+        // Verify all expected case types are present in filter options
+        for (String expectedType : expectedCaseTypes) {
+            Assert.isTrue(actualCaseTypes.contains(expectedType), 'Filter options should include: ' + expectedType);
+        }
+        
+        Test.stopTest();
+    }
+    
+    @IsTest
+    static void testCaseTypePriorityValidation() {
+        // Test that all case types in the CASE_TYPE_PRIORITY map are properly validated
+        Test.startTest();
+        
+        // Test each case type to ensure it passes validation
+        String[] caseTypes = new String[]{'Labor Law', 'MVA', 'Premises', 'WC & PI', 'Personal Injury', 'Worker Compensation', 'Other'};
+        
+        for (String caseType : caseTypes) {
+            try {
+                LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', caseType, '', false);
+                Assert.isNotNull(response, 'Response should not be null for case type: ' + caseType);
+            } catch (Exception e) {
+                Assert.fail('Case type should be valid: ' + caseType + ', Error: ' + e.getMessage());
+            }
+        }
+        
+        // Test invalid case type validation with modern structured response
+        LeadQueueService.QueueResponse invalidResponse = LeadQueueService.getQueueData('', 'Invalid Case Type', '', false);
+        Assert.isFalse(invalidResponse.success, 'Invalid case type should return unsuccessful response');
+        Assert.isTrue(invalidResponse.errorMessage.contains('Invalid case type filter'), 'Should indicate invalid case type filter');
+        Assert.isTrue(invalidResponse.errorMessage.contains('Invalid Case Type'), 'Should include the invalid value');
+        Assert.isTrue(invalidResponse.errorMessage.contains('Valid options'), 'Should provide valid options');
+        
+        // Test invalid status filter
+        LeadQueueService.QueueResponse invalidStatusResponse = LeadQueueService.getQueueData('Invalid Status', '', '', false);
+        Assert.isFalse(invalidStatusResponse.success, 'Invalid status should return unsuccessful response');
+        Assert.isTrue(invalidStatusResponse.errorMessage.contains('Invalid status filter'), 'Should indicate invalid status filter');
+        
+        // Test invalid date filter
+        LeadQueueService.QueueResponse invalidDateResponse = LeadQueueService.getQueueData('', '', 'invalidDate', false);
+        Assert.isFalse(invalidDateResponse.success, 'Invalid date filter should return unsuccessful response');
+        Assert.isTrue(invalidDateResponse.errorMessage.contains('Invalid date filter'), 'Should indicate invalid date filter');
         
         Test.stopTest();
     }

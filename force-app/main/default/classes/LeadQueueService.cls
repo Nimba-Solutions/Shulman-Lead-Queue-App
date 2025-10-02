@@ -14,15 +14,17 @@ public with sharing class LeadQueueService {
         'Labor Law' => 1,
         'MVA' => 2,
         'Premises' => 3,
-        'Personal Injury' => 4,
-        'Worker Compensation' => 5
+        'WC & PI' => 4,
+        'Personal Injury' => 5,
+        'Worker Compensation' => 6,
+        'Other' => 7
     };
     
     private static final Integer ASSIGNMENT_TTL = 1800; // 30 minutes
     private static final String CACHE_PARTITION = 'local.LeadQueueCache';
     private static final Integer HIGH_PRIORITY_THRESHOLD = 22;
     private static final Integer MEDIUM_PRIORITY_THRESHOLD = 55;
-    private static final String BASE_WHERE_CLAUSE = '(Test_Record__c = false OR Test_Record__c = null) AND Call_at_Date__c <= :now AND Type__c IN (\'Worker Compensation\', \'Personal Injury\') AND (litify_pm__Status__c IN (\'Lead Generated\', \'In Contact/Under Review\', \'Missed Appointment\', \'Intake Package Sent\', \'Attempting to Contact\', \'Questionnaire\') OR (litify_pm__Status__c = \'Intake Scheduled\' AND (litify_pm__Sign_Up_Method__c = \'E-Sign\' OR (litify_pm__Sign_Up_Method__c = \'Office\' AND Call_at_Date__c <= :twoHoursFromNow))))';
+    private static final String BASE_WHERE_CLAUSE = '(Test_Record__c = false OR Test_Record__c = null) AND Call_at_Date__c <= :now AND Type__c IN (\'Worker Compensation\', \'Personal Injury\') AND (litify_pm__Status__c IN (\'Lead Generated\', \'In Contact/Under Review\', \'Missed Appointment\', \'Intake Package Sent\', \'Attempting to Contact\') OR (litify_pm__Status__c = \'Questionnaire\' AND Call_at_Date__c <= :fourHoursAgo) OR (litify_pm__Status__c = \'Intake Scheduled\' AND (litify_pm__Sign_Up_Method__c = \'E-Sign\' OR (litify_pm__Sign_Up_Method__c = \'Office\' AND Call_at_Date__c <= :twoHoursFromNow))))';
     private static final String BASE_ORDER_BY = 'ORDER BY Priority_Score__c ASC, Call_at_Date__c ASC';
     private static final String REQUIRED_FIELDS = 'Id, Name, litify_pm__Display_Name__c, Referred_By_Name__c, litify_pm__Status__c, Priority_Score__c, CreatedDate, Case_Type_Reporting__c, Type__c, Call_at_Date__c, litify_pm__Phone__c, litify_pm__Sign_Up_Method__c, Test_Record__c, Qualification_Status__c';
     private static final String ASSIGNMENT_CACHE_PREFIX = 'assign';
@@ -31,13 +33,25 @@ public with sharing class LeadQueueService {
     @AuraEnabled(cacheable=true)
     public static QueueResponse getQueueData(String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls) {
         try {
+            // Security validation
             if (!Schema.sObjectType.litify_pm__Intake__c.isAccessible()) {
-                throw new AuraHandledException('Insufficient permissions to access intake records');
+                return new QueueResponse('Insufficient permissions to access intake records');
             }
             
-            validateFieldAccess();
-            validateFilterInputs(statusFilter, caseTypeFilter, dueDateFilter);
+            // Field access validation
+            try {
+                validateFieldAccess();
+            } catch (Exception e) {
+                return new QueueResponse('Missing required field permissions: ' + e.getMessage());
+            }
             
+            // Input validation with descriptive errors
+            ValidationResult validation = validateFilterInputs(statusFilter, caseTypeFilter, dueDateFilter);
+            if (!validation.isValid) {
+                return new QueueResponse(validation.errorMessage);
+            }
+            
+            // Execute business logic
             List<litify_pm__Intake__c> records = queryRecords(statusFilter, caseTypeFilter, dueDateFilter, showScheduledCalls);
             List<QueueRecord> queueRecords = processRecords(records, showScheduledCalls);
             QueueStats stats = calculateStats(queueRecords);
@@ -45,11 +59,9 @@ public with sharing class LeadQueueService {
             return new QueueResponse(queueRecords, stats, getFilterOptions());
             
         } catch (Exception e) {
-            // Provide specific user-friendly messages based on exception type
+            // Fallback error handling for unexpected issues
             String userMessage = getUserFriendlyErrorMessage(e);
-            AuraHandledException ahe = new AuraHandledException(userMessage);
-            ahe.setMessage(userMessage);
-            throw ahe;
+            return new QueueResponse('An unexpected error occurred: ' + userMessage);
         }
     }
     
@@ -125,8 +137,12 @@ public with sharing class LeadQueueService {
                 return new AssignmentResult(false, 'User already has an assigned record. Release current assignment first.');
             }
             
-            // Assign the record
-            orgCache.put(ASSIGNMENT_CACHE_PREFIX + recordId, userId, ASSIGNMENT_TTL);
+            // Assign the record with timestamp
+            Map<String, Object> assignmentData = new Map<String, Object>{
+                'userId' => userId,
+                'assignedAt' => Datetime.now().getTime()
+            };
+            orgCache.put(ASSIGNMENT_CACHE_PREFIX + recordId, JSON.serialize(assignmentData), ASSIGNMENT_TTL);
             orgCache.put(USER_CACHE_PREFIX + userId, recordId, ASSIGNMENT_TTL);
             return new AssignmentResult(true, 'Record assigned successfully');
             
@@ -237,8 +253,8 @@ public with sharing class LeadQueueService {
                 // Questionnaire: show only if Call_at_Date__c <= 4 hours ago (exclude recent)
                 '(litify_pm__Status__c = \'Questionnaire\' AND Call_at_Date__c <= :fourHoursAgo)' +
                 ' OR ' +
-                // Intake Scheduled: no 4-hour restriction
-                '(litify_pm__Status__c = \'Intake Scheduled\' AND (litify_pm__Sign_Up_Method__c = \'E-Sign\' OR (litify_pm__Sign_Up_Method__c = \'Office\' AND Call_at_Date__c <= :twoHoursFromNow)))' +
+                // Intake Scheduled: show if Call_at_Date__c <= now (no 4-hour restriction)
+                '(litify_pm__Status__c = \'Intake Scheduled\' AND (litify_pm__Sign_Up_Method__c = \'E-Sign\' OR (litify_pm__Sign_Up_Method__c = \'Office\' AND Call_at_Date__c <= :twoHoursFromNow)) AND Call_at_Date__c <= :now)' +
                 ')';
             
             String whereClause = baseConditions + ' AND ' + complexCondition;
@@ -349,6 +365,7 @@ public with sharing class LeadQueueService {
         qr.isOverdue = isOverdue(record.Call_at_Date__c);
         qr.isAssigned = isRecordAssigned(record.Id);
         qr.assignedTo = getAssignedUserNameFromMap(record.Id, userIdToNameMap);
+        qr.assignedTimestamp = getAssignmentTimestamp(record.Id);
         return qr;
     }
     
@@ -409,8 +426,8 @@ public with sharing class LeadQueueService {
             if (orgCache == null) {
                 return false;
             }
-            String assignedUserId = (String) orgCache.get(ASSIGNMENT_CACHE_PREFIX + recordId);
-            return assignedUserId != null;
+            String assignmentJson = (String) orgCache.get(ASSIGNMENT_CACHE_PREFIX + recordId);
+            return assignmentJson != null;
         } catch (Exception e) {
             return false;
         }
@@ -419,14 +436,38 @@ public with sharing class LeadQueueService {
     
     private static String getAssignedUserId(String recordId) {
         try {
-            Cache.OrgPartition orgCache = getCachePartition();
-            if (orgCache == null) {
-                return '';
-            }
-            return (String) orgCache.get(ASSIGNMENT_CACHE_PREFIX + recordId);
+            Map<String, Object> assignmentData = getAssignmentData(recordId);
+            return assignmentData != null ? (String) assignmentData.get('userId') : '';
         } catch (Exception e) {
             System.debug('Error getting assigned user ID: ' + e.getMessage());
             return '';
+        }
+    }
+    
+    private static Map<String, Object> getAssignmentData(String recordId) {
+        try {
+            Cache.OrgPartition orgCache = getCachePartition();
+            if (orgCache == null) {
+                return null;
+            }
+            String assignmentJson = (String) orgCache.get(ASSIGNMENT_CACHE_PREFIX + recordId);
+            if (String.isBlank(assignmentJson)) {
+                return null;
+            }
+            return (Map<String, Object>) JSON.deserializeUntyped(assignmentJson);
+        } catch (Exception e) {
+            System.debug('Error getting assignment data: ' + e.getMessage());
+            return null;
+        }
+    }
+    
+    private static Long getAssignmentTimestamp(String recordId) {
+        try {
+            Map<String, Object> assignmentData = getAssignmentData(recordId);
+            return assignmentData != null ? (Long) assignmentData.get('assignedAt') : null;
+        } catch (Exception e) {
+            System.debug('Error getting assignment timestamp: ' + e.getMessage());
+            return null;
         }
     }
     
@@ -471,7 +512,7 @@ public with sharing class LeadQueueService {
     private static void validateFieldAccess() {
         try {
             Map<String, Schema.SObjectField> fieldMap = Schema.sObjectType.litify_pm__Intake__c.fields.getMap();
-            List<String> fields = new List<String>{'litify_pm__Status__c', 'Case_Type_Reporting__c', 'Call_at_Date__c', 'litify_pm__Phone__c', 'Priority_Score__c', 'Qualification_Status__c'};
+            List<String> fields = new List<String>{'litify_pm__Status__c', 'Case_Type_Reporting__c', 'Call_at_Date__c', 'litify_pm__Phone__c', 'Priority_Score__c'};
             
             for (String field : fields) {
                 Boolean fieldExists = fieldMap.containsKey(field);
@@ -521,14 +562,27 @@ public with sharing class LeadQueueService {
     }
     
     public class QueueResponse {
+        @AuraEnabled public Boolean success { get; set; }
+        @AuraEnabled public String errorMessage { get; set; }
         @AuraEnabled public List<QueueRecord> records { get; set; }
         @AuraEnabled public QueueStats stats { get; set; }
         @AuraEnabled public FilterOptions filters { get; set; }
         
+        // Success constructor
         public QueueResponse(List<QueueRecord> records, QueueStats stats, FilterOptions filters) {
+            this.success = true;
             this.records = records;
             this.stats = stats;
             this.filters = filters;
+        }
+        
+        // Error constructor
+        public QueueResponse(String errorMessage) {
+            this.success = false;
+            this.errorMessage = errorMessage;
+            this.records = new List<QueueRecord>();
+            this.stats = new QueueStats();
+            this.filters = new FilterOptions();
         }
     }
     
@@ -540,6 +594,7 @@ public with sharing class LeadQueueService {
         @AuraEnabled public Boolean isOverdue { get; set; }
         @AuraEnabled public Boolean isAssigned { get; set; }
         @AuraEnabled public String assignedTo { get; set; }
+        @AuraEnabled public Long assignedTimestamp { get; set; }
     }
     
     public class QueueStats {
@@ -585,16 +640,27 @@ public with sharing class LeadQueueService {
         }
     }
     
-    private static void validateFilterInputs(String statusFilter, String caseTypeFilter, String dueDateFilter) {
+    public class ValidationResult {
+        public Boolean isValid { get; set; }
+        public String errorMessage { get; set; }
+        
+        public ValidationResult(Boolean isValid, String errorMessage) {
+            this.isValid = isValid;
+            this.errorMessage = errorMessage;
+        }
+    }
+    
+    private static ValidationResult validateFilterInputs(String statusFilter, String caseTypeFilter, String dueDateFilter) {
         if (String.isNotBlank(statusFilter) && !STATUS_PRIORITY.containsKey(statusFilter)) {
-            throw new AuraHandledException('Invalid status filter value');
+            return new ValidationResult(false, 'Invalid status filter: ' + statusFilter + '. Valid options: ' + String.join(STATUS_PRIORITY.keySet(), ', '));
         }
         if (String.isNotBlank(caseTypeFilter) && !CASE_TYPE_PRIORITY.containsKey(caseTypeFilter)) {
-            throw new AuraHandledException('Invalid case type filter value');
+            return new ValidationResult(false, 'Invalid case type filter: ' + caseTypeFilter + '. Valid options: ' + String.join(CASE_TYPE_PRIORITY.keySet(), ', '));
         }
         if (String.isNotBlank(dueDateFilter) && !isValidDateFilter(dueDateFilter)) {
-            throw new AuraHandledException('Invalid date filter value');
+            return new ValidationResult(false, 'Invalid date filter: ' + dueDateFilter + '. Valid options: today, thisWeek, nextWeek');
         }
+        return new ValidationResult(true, null);
     }
     
     private static Boolean isValidDateFilter(String dateFilter) {
