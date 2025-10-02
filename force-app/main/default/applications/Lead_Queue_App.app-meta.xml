@@ -14,5 +14,5 @@
     <navType>Standard</navType>
     <tabs>Lead_Queue</tabs>
     <uiType>Lightning</uiType>
-    <utilityBar>Lead_Queue_App_UtilityBar</utilityBar>
+    <utilityBar>Lead_Queue_UtilityBar</utilityBar>
 </CustomApplication>
