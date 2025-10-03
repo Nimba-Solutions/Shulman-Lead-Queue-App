@@ -9,6 +9,7 @@ import assignRecord from '@salesforce/apex/LeadQueueService.assignRecord';
 import assignNextAvailableRecord from '@salesforce/apex/LeadQueueService.assignNextAvailableRecord';
 import releaseUserAssignments from '@salesforce/apex/LeadQueueService.releaseUserAssignments';
 import getUserAssignedRecordIds from '@salesforce/apex/LeadQueueService.getUserAssignedRecordIds';
+import getUserAssignmentData from '@salesforce/apex/LeadQueueService.getUserAssignmentData';
 
 // Import utility modules
 import { SharedUtils } from './utils/sharedUtils';
@@ -59,6 +60,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     @track currentTime = new Date();
     currentUserId = Id;
     userAssignedRecordIds = [];
+    userAssignmentTimestamps = {};
     isAssigning = false;
     isReleasing = false;
     @track showScheduledCalls = false;
@@ -350,14 +352,15 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     
     async checkUserAssignments() {
         try {
-            const assignedIds = await getUserAssignedRecordIds();
+            const assignmentData = await getUserAssignmentData();
             const oldHasAssignments = this.hasAssignments;
             
-            // Store the assigned record IDs for utility bar timer logic
-            this.userAssignedRecordIds = assignedIds || [];
+            // Store both record IDs and timestamps
+            this.userAssignedRecordIds = Object.keys(assignmentData);
+            this.userAssignmentTimestamps = assignmentData;
             this.hasAssignments = this.userAssignedRecordIds.length > 0;
             
-            // If assignment status changed, force a template refresh
+            // If assignment status changed, force template refresh
             if (oldHasAssignments !== this.hasAssignments) {
                 // Small delay to ensure DOM updates
                 setTimeout(() => {

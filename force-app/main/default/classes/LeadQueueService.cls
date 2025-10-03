@@ -175,7 +175,7 @@ public with sharing class LeadQueueService {
     }
     
     @AuraEnabled(cacheable=false)
-    public static List<String> getUserAssignedRecordIds() {
+    public static Map<String, Long> getUserAssignmentData() {
         try {
             String userId = UserInfo.getUserId();
             Cache.OrgPartition orgCache = getCachePartition();
@@ -183,12 +183,25 @@ public with sharing class LeadQueueService {
             if (orgCache != null) {
                 assignedRecordId = (String) orgCache.get(USER_CACHE_PREFIX + userId);
             }
-            return assignedRecordId != null ? new List<String>{assignedRecordId} : new List<String>();
+            
+            Map<String, Long> result = new Map<String, Long>();
+            if (assignedRecordId != null) {
+                Long timestamp = getAssignmentTimestamp(assignedRecordId);
+                result.put(assignedRecordId, timestamp);
+            }
+            return result;
             
         } catch (Exception e) {
             System.debug('User assignments error: ' + e.getMessage());
-            throw new AuraHandledException('Failed to check user assignments: ' + e.getMessage());
+            return new Map<String, Long>();
         }
+    }
+    
+    // Keep legacy method for backwards compatibility
+    @AuraEnabled(cacheable=false)
+    public static List<String> getUserAssignedRecordIds() {
+        Map<String, Long> assignmentData = getUserAssignmentData();
+        return new List<String>(assignmentData.keySet());
     }
     
     @AuraEnabled
@@ -687,4 +700,5 @@ public with sharing class LeadQueueService {
         Pattern idPattern = Pattern.compile('[a-zA-Z0-9]{15}([a-zA-Z0-9]{3})?');
         return idPattern.matcher(recordId).matches();
     }
+    
 }

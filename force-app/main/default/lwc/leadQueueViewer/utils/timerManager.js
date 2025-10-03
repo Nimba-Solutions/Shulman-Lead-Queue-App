@@ -57,50 +57,23 @@ export class TimerManager {
      * Get utility bar timer for current user only
      */
     getUtilityBarTimer() {
-        // For utility bar display of assignment duration for CURRENT USER only
+        // Only show timer for records assigned to the current user
         if (this.component.hasAssignments && this.component.userAssignedRecordIds && this.component.userAssignedRecordIds.length > 0) {
-            // Strategy 1: Try current records first
-            if (this.component.records && this.component.records.length > 0) {
-                const currentUserRecord = this.component.records.find(record => 
-                    record.assignedTo && this.component.userAssignedRecordIds.includes(record.Id)
-                );
-                
-                if (currentUserRecord && currentUserRecord.assignmentTimestamp) {
-                    const timerValue = this.calculateTimerValue(currentUserRecord.assignmentTimestamp);
-                    if (timerValue) {
-                        return `Time Assigned: ${timerValue}`;
-                    }
-                }
+            // Get the user's assigned record ID (should only be one)
+            const assignedRecordId = this.component.userAssignedRecordIds[0];
+            const timestamp = this.component.userAssignmentTimestamps[assignedRecordId];
+            
+            console.log('Utility bar - assignedRecordId:', assignedRecordId);
+            console.log('Utility bar - timestamp:', timestamp);
+            
+            if (timestamp) {
+                const timerValue = this.calculateTimerValue(timestamp);
+                return timerValue ? `Time Assigned: ${timerValue}` : 'Time Assigned: --:--';
             }
             
-            // Strategy 2: Try original records as fallback
-            if (this.component.originalRecords && this.component.originalRecords.length > 0) {
-                const originalUserRecord = this.component.originalRecords.find(record => 
-                    record.assignedTo && this.component.userAssignedRecordIds.includes(record.Id)
-                );
-                
-                if (originalUserRecord && originalUserRecord.assignmentTimestamp) {
-                    const timerValue = this.calculateTimerValue(originalUserRecord.assignmentTimestamp);
-                    if (timerValue) {
-                        return `Time Assigned: ${timerValue}`;
-                    }
-                }
-            }
-            
-            // Strategy 3: Look for any assigned record in current records (less strict)
-            if (this.component.records && this.component.records.length > 0) {
-                const anyAssignedRecord = this.component.records.find(record => record.assignedTo);
-                if (anyAssignedRecord && anyAssignedRecord.assignmentTimestamp) {
-                    const timerValue = this.calculateTimerValue(anyAssignedRecord.assignmentTimestamp);
-                    if (timerValue) {
-                        return `Time Assigned: ${timerValue}`;
-                    }
-                }
-            }
-            
-            // Final fallback: show that we're assigned but timestamp is unavailable
             return 'Time Assigned: --:--';
         }
+        
         return '';
     }
 
@@ -202,7 +175,19 @@ export class TimerManager {
      */
     getAssignedRecordInfo() {
         if (this.component.hasAssignments && this.component.records.length > 0) {
-            const assignedRecord = this.component.records.find(record => record.assignedTo);
+            // Find record assigned to current user using proper ID matching
+            const assignedRecord = this.component.records.find(record => {
+                if (!record.assignedTo || !this.component.userAssignedRecordIds) {
+                    return false;
+                }
+                
+                const originalRecordId = record.Id.endsWith('-assigned') 
+                    ? record.Id.slice(0, -9) 
+                    : record.Id;
+                
+                return this.component.userAssignedRecordIds.includes(originalRecordId);
+            });
+            
             return assignedRecord ? `Currently assigned: ${assignedRecord.litify_pm__Display_Name__c || assignedRecord.Name}` : 'Record assigned';
         }
         return '';
@@ -213,7 +198,19 @@ export class TimerManager {
      */
     getAssignedRecordDisplayName() {
         if (this.component.hasAssignments && this.component.records.length > 0) {
-            const assignedRecord = this.component.records.find(record => record.assignedTo);
+            // Find record assigned to current user using proper ID matching
+            const assignedRecord = this.component.records.find(record => {
+                if (!record.assignedTo || !this.component.userAssignedRecordIds) {
+                    return false;
+                }
+                
+                const originalRecordId = record.Id.endsWith('-assigned') 
+                    ? record.Id.slice(0, -9) 
+                    : record.Id;
+                
+                return this.component.userAssignedRecordIds.includes(originalRecordId);
+            });
+            
             return assignedRecord ? (assignedRecord.litify_pm__Display_Name__c || assignedRecord.Name) : 'Assigned Record';
         }
         return '';
@@ -224,7 +221,19 @@ export class TimerManager {
      */
     getAssignedRecordStatus() {
         if (this.component.hasAssignments && this.component.records.length > 0) {
-            const assignedRecord = this.component.records.find(record => record.assignedTo);
+            // Find record assigned to current user using proper ID matching
+            const assignedRecord = this.component.records.find(record => {
+                if (!record.assignedTo || !this.component.userAssignedRecordIds) {
+                    return false;
+                }
+                
+                const originalRecordId = record.Id.endsWith('-assigned') 
+                    ? record.Id.slice(0, -9) 
+                    : record.Id;
+                
+                return this.component.userAssignedRecordIds.includes(originalRecordId);
+            });
+            
             if (assignedRecord && assignedRecord.Status) {
                 return `Status: ${assignedRecord.Status}`;
             }
