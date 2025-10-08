@@ -1,8 +1,8 @@
-import { LightningElement, api, wire, track } from 'lwc';
+import { LightningElement, api, track, wire } from 'lwc';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import { NavigationMixin } from 'lightning/navigation';
 import { IsConsoleNavigation } from 'lightning/platformWorkspaceApi';
-import { refreshApex } from '@salesforce/apex';
+// Removed refreshApex import - pure LWC approach without Aura compatibility layer
 import Id from '@salesforce/user/Id';
 import getQueueData from '@salesforce/apex/LeadQueueService.getQueueData';
 import assignRecord from '@salesforce/apex/LeadQueueService.assignRecord';
@@ -67,7 +67,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     
     refreshInterval;
     timerInterval;
-    wiredQueueResult;
+    // Removed wiredQueueResult - pure LWC approach without Aura compatibility layer
     filterTimeout;
     filterRequestId = 0;
     
@@ -82,44 +82,39 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         return this.dataProcessor ? this.dataProcessor.getTableColumns() : [];
     }
     
-    @wire(getQueueData, { 
-        statusFilter: '$statusFilter', 
-        caseTypeFilter: '$caseTypeFilter', 
-        dueDateFilter: '$dueDateFilter',
-        showScheduledCalls: '$showScheduledCalls'
-    })
-    wiredQueue(result) {
-        this.wiredQueueResult = result;
-        
-        // Only process if this is the most recent request
-        const currentRequestId = this.filterRequestId;
-        
-        if (result.data) {
-            // Use requestAnimationFrame to ensure this is processed after any pending filter updates
-            requestAnimationFrame(() => {
-                if (this.filterRequestId === currentRequestId) {
-                    this.processQueueResponse(result.data);
-                }
+    // Replace @wire with imperative calls to eliminate Aura compatibility layer
+    async loadQueueData() {
+        try {
+            const currentRequestId = this.filterRequestId;
+            
+            const result = await getQueueData({ 
+                statusFilter: this.statusFilter, 
+                caseTypeFilter: this.caseTypeFilter, 
+                dueDateFilter: this.dueDateFilter,
+                showScheduledCalls: this.showScheduledCalls
             });
-        } else if (result.error) {
-            requestAnimationFrame(() => {
-                if (this.filterRequestId === currentRequestId) {
-                    // Clear data arrays but preserve user filter state for better UX
-                    this.records = [];
-                    this.originalRecords = [];
-                    this.originalStats = { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0 };
-                    this.queueStats = { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0 };
-                    this.filterOptions = { statusOptions: [], caseTypeOptions: [] };
-                    
-                    // Preserve user selections: statusFilter, caseTypeFilter, dueDateFilter, activeTileFilter remain intact
-                    // Only clear operational state, not user preferences
-                    this.hasAssignments = false;
-                    this.isAssigning = false;
-                    this.isReleasing = false;
-                    
-                    this.showToast('Error', 'Failed to load lead queue: ' + this.getErrorMessage(result.error), 'error');
-                }
-            });
+            
+            // Only process if this is still the most recent request
+            if (this.filterRequestId === currentRequestId) {
+                this.processQueueResponse(result);
+            }
+        } catch (error) {
+            if (this.filterRequestId === this.filterRequestId) {
+                // Clear data arrays but preserve user filter state for better UX
+                this.records = [];
+                this.originalRecords = [];
+                this.originalStats = { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0 };
+                this.queueStats = { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0 };
+                this.filterOptions = { statusOptions: [], caseTypeOptions: [] };
+                
+                // Preserve user selections: statusFilter, caseTypeFilter, dueDateFilter, activeTileFilter remain intact
+                // Only clear operational state, not user preferences
+                this.hasAssignments = false;
+                this.isAssigning = false;
+                this.isReleasing = false;
+                
+                this.showToast('Error', 'Failed to load lead queue: ' + this.getErrorMessage(error), 'error');
+            }
         }
     }
     
@@ -147,14 +142,17 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         // Console app warm-up optimizations
         this.consoleNavigation.warmUpConsoleApp();
         
+        // Initial data load using pure LWC (no Aura compatibility layer)
+        this.loadQueueData();
         this.checkUserAssignments();
+        
+        // Start live timer updates AFTER initial data load
+        this.timerManager.startTimerUpdates();
+        
         this.refreshInterval = setInterval(() => {
             this.handleRefresh();
             this.checkUserAssignments();
         }, SharedUtils.CONSTANTS.REFRESH_INTERVAL);
-        
-        // Start live timer updates
-        this.timerManager.startTimerUpdates();
     }
 
     renderedCallback() {
@@ -196,7 +194,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         
         // Enhanced cleanup to prevent memory leaks
         this.filterRequestId = 0;
-        this.wiredQueueResult = null;
+        // Removed wiredQueueResult cleanup - pure LWC approach
         this.originalRecords = [];
         this.records = [];
         this.activeTileFilter = null;
@@ -237,12 +235,8 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     
     
     async handleRefresh() {
-        try {
-            await refreshApex(this.wiredQueueResult);
-        } catch (error) {
-            console.error('Refresh error details:', error);
-            this.showToast('Error', 'Failed to refresh data: ' + this.getErrorMessage(error), 'error');
-        }
+        // Pure LWC refresh - no Aura compatibility layer
+        await this.loadQueueData();
     }
     
     async handleAssignNext() {
@@ -258,9 +252,9 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
                 
                 // Assignment timestamp handled by server Platform Cache
                 
-                // Refresh data and assignments in parallel
+                // Refresh data and assignments in parallel (pure LWC approach)
                 Promise.all([
-                    refreshApex(this.wiredQueueResult),
+                    this.loadQueueData(),
                     this.checkUserAssignments()
                 ]).then(() => {
                     // Force re-render of utility interface
@@ -308,9 +302,9 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
                 
                 // Assignment timestamp handled by server Platform Cache
                 
-                // Refresh data and assignments in parallel
+                // Refresh data and assignments in parallel (pure LWC approach)
                 Promise.all([
-                    refreshApex(this.wiredQueueResult),
+                    this.loadQueueData(),
                     this.checkUserAssignments()
                 ]).then(() => {
                     // Force re-render of utility interface
@@ -338,7 +332,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
             // Assignment cleanup handled by server Platform Cache
             
             await Promise.all([
-                refreshApex(this.wiredQueueResult),
+                this.loadQueueData(),
                 this.checkUserAssignments()
             ]);
             // Force re-render of utility interface
@@ -397,6 +391,8 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
             } else if (filterName === 'dueDate') {
                 this.dueDateFilter = filterValue;
             }
+            // Trigger data reload after filter change (pure LWC approach)
+            this.loadQueueData();
             // Clear timeout reference after execution
             this.filterTimeout = null;
         }, 300);
@@ -480,7 +476,8 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     }
     
     get isLoading() {
-        return this.wiredQueueResult?.loading || false;
+        // Pure LWC approach - manage loading state manually if needed
+        return false; // Can add @track isLoadingState if loading spinner is needed
     }
     
     get hasRecords() {
@@ -541,7 +538,16 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     }
 
     get assignedRecordTimer() {
-        return this.timerManager ? this.timerManager.getUtilityBarTimer() : '';
+        if (!this.timerManager) {
+            return '';
+        }
+        
+        try {
+            return this.timerManager.getUtilityBarTimer();
+        } catch (error) {
+            console.log('Timer error:', error);
+            return 'Time Assigned: --:--';
+        }
     }
 
     getRecordAssignmentTimer(recordId, assignedTo, assignedTimestamp) {
@@ -559,20 +565,16 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     showReadyToCalls() {
         if (this.showScheduledCalls) {
             this.showScheduledCalls = false;
-            // Clear wire cache to force refresh
-            if (this.wiredQueueResult) {
-                refreshApex(this.wiredQueueResult);
-            }
+            // Pure LWC approach - no Aura compatibility layer
+            this.loadQueueData();
         }
     }
 
     showScheduledCallsView() {
         if (!this.showScheduledCalls) {
             this.showScheduledCalls = true;
-            // Clear wire cache to force refresh
-            if (this.wiredQueueResult) {
-                refreshApex(this.wiredQueueResult);
-            }
+            // Pure LWC approach - no Aura compatibility layer
+            this.loadQueueData();
         }
     }
 }

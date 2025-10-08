@@ -61,10 +61,18 @@ export class TimerManager {
         if (this.component.hasAssignments && this.component.userAssignedRecordIds && this.component.userAssignedRecordIds.length > 0) {
             // Get the user's assigned record ID (should only be one)
             const assignedRecordId = this.component.userAssignedRecordIds[0];
+            
+            // Check if userAssignmentTimestamps exists and has the record
+            if (!this.component.userAssignmentTimestamps) {
+                console.log('Utility bar - userAssignmentTimestamps not available');
+                return 'Time Assigned: --:--';
+            }
+            
             const timestamp = this.component.userAssignmentTimestamps[assignedRecordId];
             
             console.log('Utility bar - assignedRecordId:', assignedRecordId);
             console.log('Utility bar - timestamp:', timestamp);
+            console.log('Utility bar - all timestamps:', this.component.userAssignmentTimestamps);
             
             if (timestamp) {
                 const timerValue = this.calculateTimerValue(timestamp);
@@ -117,8 +125,8 @@ export class TimerManager {
      * Refresh all table timers
      */
     refreshTableTimers() {
-        // Only update timer values if there are assigned records to optimize performance
-        if (this.component.records && this.component.records.length > 0 && this.component.hasAssignments) {
+        // Update timer values for all assigned records (regardless of who they're assigned to)
+        if (this.component.records && this.component.records.length > 0) {
             // Create a map of original records for faster lookup
             const originalRecordMap = new Map();
             this.component.originalRecords.forEach(orig => {
@@ -131,9 +139,14 @@ export class TimerManager {
                     return record;
                 }
                 
-                // Use the record ID directly - no modification needed
-                const originalRecord = originalRecordMap.get(record.Id);
-                const timestamp = originalRecord ? originalRecord.assignmentTimestamp : null;
+                // Preserve existing assignment timestamp if available, it contains the original assignment time
+                let timestamp = record.assignmentTimestamp;
+                
+                // If no timestamp on record, try to get from originalRecords 
+                if (!timestamp) {
+                    const originalRecord = originalRecordMap.get(record.Id);
+                    timestamp = originalRecord ? originalRecord.assignmentTimestamp : null;
+                }
                 
                 return {
                     ...record,
@@ -152,6 +165,9 @@ export class TimerManager {
             clearInterval(this.component.timerInterval);
             this.component.timerInterval = null;
         }
+
+        // Initialize current time immediately
+        this.component.currentTime = new Date();
 
         // Start live timer updates
         this.component.timerInterval = setInterval(() => {
@@ -175,12 +191,18 @@ export class TimerManager {
      */
     getAssignedRecordInfo() {
         if (this.component.hasAssignments && this.component.records.length > 0) {
-            // Find record assigned to current user using proper ID matching
+            // Find record assigned to current user using safer ID matching
             const assignedRecord = this.component.records.find(record => {
                 if (!record.assignedTo || !this.component.userAssignedRecordIds) {
                     return false;
                 }
                 
+                // Try exact match first
+                if (this.component.userAssignedRecordIds.includes(record.Id)) {
+                    return true;
+                }
+                
+                // Try with -assigned suffix removed (fallback)
                 const originalRecordId = record.Id.endsWith('-assigned') 
                     ? record.Id.slice(0, -9) 
                     : record.Id;
@@ -198,12 +220,18 @@ export class TimerManager {
      */
     getAssignedRecordDisplayName() {
         if (this.component.hasAssignments && this.component.records.length > 0) {
-            // Find record assigned to current user using proper ID matching
+            // Find record assigned to current user using safer ID matching
             const assignedRecord = this.component.records.find(record => {
                 if (!record.assignedTo || !this.component.userAssignedRecordIds) {
                     return false;
                 }
                 
+                // Try exact match first
+                if (this.component.userAssignedRecordIds.includes(record.Id)) {
+                    return true;
+                }
+                
+                // Try with -assigned suffix removed (fallback)
                 const originalRecordId = record.Id.endsWith('-assigned') 
                     ? record.Id.slice(0, -9) 
                     : record.Id;
@@ -221,12 +249,18 @@ export class TimerManager {
      */
     getAssignedRecordStatus() {
         if (this.component.hasAssignments && this.component.records.length > 0) {
-            // Find record assigned to current user using proper ID matching
+            // Find record assigned to current user using safer ID matching
             const assignedRecord = this.component.records.find(record => {
                 if (!record.assignedTo || !this.component.userAssignedRecordIds) {
                     return false;
                 }
                 
+                // Try exact match first
+                if (this.component.userAssignedRecordIds.includes(record.Id)) {
+                    return true;
+                }
+                
+                // Try with -assigned suffix removed (fallback)
                 const originalRecordId = record.Id.endsWith('-assigned') 
                     ? record.Id.slice(0, -9) 
                     : record.Id;
