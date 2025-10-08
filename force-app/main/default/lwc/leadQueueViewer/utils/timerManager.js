@@ -64,15 +64,10 @@ export class TimerManager {
             
             // Check if userAssignmentTimestamps exists and has the record
             if (!this.component.userAssignmentTimestamps) {
-                console.log('Utility bar - userAssignmentTimestamps not available');
                 return 'Time Assigned: --:--';
             }
             
             const timestamp = this.component.userAssignmentTimestamps[assignedRecordId];
-            
-            console.log('Utility bar - assignedRecordId:', assignedRecordId);
-            console.log('Utility bar - timestamp:', timestamp);
-            console.log('Utility bar - all timestamps:', this.component.userAssignmentTimestamps);
             
             if (timestamp) {
                 const timerValue = this.calculateTimerValue(timestamp);

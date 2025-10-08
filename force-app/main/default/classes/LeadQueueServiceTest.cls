@@ -411,12 +411,14 @@ private class LeadQueueServiceTest {
         Assert.isNotNull(response.records, 'Records should not be null');
         
         // All returned records should meet the new criteria
+        Datetime nowValue = System.now();
         for (LeadQueueService.QueueRecord queueRecord : response.records) {
             litify_pm__Intake__c record = queueRecord.record;
             
             // Must be valid case type
-            Assert.isTrue(record.Type__c == 'Worker Compensation' || record.Type__c == 'Personal Injury', 
-                         'Record must be Worker Compensation or Personal Injury');
+            Set<String> validTypes = new Set<String>{'Worker Compensation', 'Personal Injury', 'WC & PI'};
+            Assert.isTrue(validTypes.contains(record.Type__c), 
+                         'Record must be a permitted intake type');
             
             // Must meet status criteria
             Set<String> validStatuses = new Set<String>{'Lead Generated', 'In Contact/Under Review', 'Missed Appointment', 
@@ -429,10 +431,11 @@ private class LeadQueueServiceTest {
                 Boolean isESign = record.litify_pm__Sign_Up_Method__c == 'E-Sign';
                 Boolean isOfficeWithValidCallDate = record.litify_pm__Sign_Up_Method__c == 'Office' && 
                                                    record.Call_at_Date__c != null && 
-                                                   record.Call_at_Date__c <= System.now().addHours(-2);
+                                                   record.Call_at_Date__c >= nowValue.addHours(-2) &&
+                                                   record.Call_at_Date__c <= nowValue.addHours(2);
                 
                 Assert.isTrue(isESign || isOfficeWithValidCallDate, 
-                             'Intake Scheduled record must meet E-Sign OR (Office AND Call_at_Date <= 2 hours ago) criteria');
+                             'Intake Scheduled record must meet E-Sign OR (Office within +/-2 hours) criteria');
             }
         }
         
@@ -990,5 +993,62 @@ private class LeadQueueServiceTest {
         Assert.isTrue(invalidDateResponse.errorMessage.contains('Invalid date filter'), 'Should indicate invalid date filter');
         
         Test.stopTest();
+    }
+
+    @IsTest
+    static void testQueueAllowsWcPiFilter() {
+        Test.startTest();
+        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', 'WC & PI', '', false);
+        Test.stopTest();
+        
+        Assert.isNotNull(response, 'Response should not be null when filtering by WC & PI');
+        Assert.isTrue(response.success, 'WC & PI filter should return successful response');
+    }
+
+    @IsTest
+    static void testAssignRecordSupportsWcPiType() {
+        litify_pm__Intake__c wcPiRecord = [SELECT Id FROM litify_pm__Intake__c WHERE Type__c = 'WC & PI' LIMIT 1];
+        
+        Test.startTest();
+        LeadQueueService.AssignmentResult result = LeadQueueService.assignRecord(wcPiRecord.Id);
+        Test.stopTest();
+        
+        Assert.isTrue(result.success, 'WC & PI record should be assignable: ' + result.message);
+    }
+
+    @IsTest
+    static void testAutoReleaseEnablesReassignment() {
+        litify_pm__Intake__c testRecord = [SELECT Id FROM litify_pm__Intake__c LIMIT 1];
+        
+        Test.startTest();
+        LeadQueueService.AssignmentResult firstAssignment = LeadQueueService.assignRecord(testRecord.Id);
+        LeadQueueService.autoReleaseRecords(new List<Id>{testRecord.Id});
+        LeadQueueService.AssignmentResult secondAssignment = LeadQueueService.assignRecord(testRecord.Id);
+        Test.stopTest();
+        
+        // If cache is unavailable the service returns a soft-success message; otherwise reassignment should succeed normally.
+        Assert.isTrue(secondAssignment.success, 'Record should be reassignable after auto-release');
+        if (firstAssignment.success && (firstAssignment.message == null || !firstAssignment.message.contains('cache unavailable'))) {
+            Assert.isTrue(secondAssignment.message == null || !secondAssignment.message.contains('already has an assigned record'),
+                'Auto-release must clear user assignment cache when available');
+        }
+    }
+
+    @IsTest
+    static void testAssignmentTimestampIsReturned() {
+        litify_pm__Intake__c testRecord = [SELECT Id FROM litify_pm__Intake__c LIMIT 1];
+        
+        Test.startTest();
+        LeadQueueService.AssignmentResult result = LeadQueueService.assignRecord(testRecord.Id);
+        Map<String, Long> assignmentData = LeadQueueService.getUserAssignmentData();
+        Test.stopTest();
+        
+        Assert.isTrue(result.success, 'Assignment should succeed to capture timestamp');
+        Assert.isFalse(assignmentData.isEmpty(), 'Assignment map should include the assigned record');
+        Long assignedAt = assignmentData.values()[0];
+        Assert.isNotNull(assignedAt, 'Assignment timestamp should be populated');
+        
+        // Cleanup to avoid impacting subsequent tests
+        LeadQueueService.releaseUserAssignments();
     }
 }

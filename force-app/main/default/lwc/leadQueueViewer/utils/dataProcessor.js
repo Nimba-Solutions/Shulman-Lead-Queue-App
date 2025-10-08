@@ -64,8 +64,6 @@ export class DataProcessor {
         // Apply current tile filter if active
         this.applyClientSideFilter();
         
-        // Warm up console navigation now that we have records
-        this.component.consoleNavigation.warmUpWithRecords();
     }
 
     /**
@@ -131,6 +129,10 @@ export class DataProcessor {
         }
         
         this.updateTileVisualState();
+        // Refresh from server to restore full dataset
+        if (typeof this.component.loadQueueData === 'function') {
+            this.component.loadQueueData();
+        }
     }
 
     /**

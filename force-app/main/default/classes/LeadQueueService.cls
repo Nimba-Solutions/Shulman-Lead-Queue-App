@@ -20,11 +20,16 @@ public with sharing class LeadQueueService {
         'Other' => 7
     };
     
+    private static final Set<String> ALLOWED_INTAKE_TYPES = new Set<String>{
+        'Worker Compensation',
+        'Personal Injury',
+        'WC & PI'
+    };
+    
     private static final Integer ASSIGNMENT_TTL = 1800; // 30 minutes
     private static final String CACHE_PARTITION = 'local.LeadQueueCache';
     private static final Integer HIGH_PRIORITY_THRESHOLD = 22;
     private static final Integer MEDIUM_PRIORITY_THRESHOLD = 55;
-    private static final String BASE_WHERE_CLAUSE = '(Test_Record__c = false OR Test_Record__c = null) AND Call_at_Date__c <= :now AND Type__c IN (\'Worker Compensation\', \'Personal Injury\', \'WC & PI\') AND (litify_pm__Status__c IN (\'Lead Generated\', \'In Contact/Under Review\', \'Missed Appointment\', \'Intake Package Sent\', \'Attempting to Contact\') OR (litify_pm__Status__c = \'Questionnaire\' AND Call_at_Date__c <= :fourHoursAgo) OR (litify_pm__Status__c = \'Intake Scheduled\' AND (litify_pm__Sign_Up_Method__c = \'E-Sign\' OR (litify_pm__Sign_Up_Method__c = \'Office\' AND Call_at_Date__c <= :twoHoursFromNow))))';
     private static final String BASE_ORDER_BY = 'ORDER BY Priority_Score__c ASC, Call_at_Date__c ASC';
     private static final String REQUIRED_FIELDS = 'Id, Name, litify_pm__Display_Name__c, Referred_By_Name__c, litify_pm__Status__c, Priority_Score__c, CreatedDate, Case_Type_Reporting__c, Type__c, Call_at_Date__c, litify_pm__Phone__c, litify_pm__Sign_Up_Method__c, Test_Record__c, Qualification_Status__c';
     private static final String ASSIGNMENT_CACHE_PREFIX = 'assign';
@@ -109,7 +114,7 @@ public with sharing class LeadQueueService {
             List<litify_pm__Intake__c> records = [
                 SELECT Id FROM litify_pm__Intake__c 
                 WHERE Id = :recordId 
-                AND Type__c IN ('Worker Compensation', 'Personal Injury')
+                AND Type__c IN :ALLOWED_INTAKE_TYPES
                 LIMIT 1
             ];
             
@@ -214,14 +219,22 @@ public with sharing class LeadQueueService {
             }
             
             for (Id recordId : recordIds) {
-                String assignedUserId = (String) orgCache.get(ASSIGNMENT_CACHE_PREFIX + recordId);
-                if (assignedUserId != null) {
-                    // Remove record assignment
-                    orgCache.remove(ASSIGNMENT_CACHE_PREFIX + recordId);
-                    
-                    // Remove user assignment
+                String assignedUserId = null;
+                String assignmentJson = (String) orgCache.get(ASSIGNMENT_CACHE_PREFIX + recordId);
+                
+                if (!String.isBlank(assignmentJson)) {
+                    try {
+                        Map<String, Object> assignmentData = (Map<String, Object>) JSON.deserializeUntyped(assignmentJson);
+                        assignedUserId = assignmentData != null ? (String) assignmentData.get('userId') : null;
+                    } catch (Exception parseError) {
+                        System.debug('Auto-release parse error for record ' + recordId + ': ' + parseError.getMessage());
+                    }
+                }
+
+                orgCache.remove(ASSIGNMENT_CACHE_PREFIX + recordId);
+                
+                if (!String.isBlank(assignedUserId)) {
                     orgCache.remove(USER_CACHE_PREFIX + assignedUserId);
-                    
                     System.debug('Auto-released record: ' + recordId + ' from user: ' + assignedUserId);
                 }
             }
@@ -250,12 +263,12 @@ public with sharing class LeadQueueService {
     }
     
     private static String buildBaseQuery(Boolean showScheduledCalls) {
-        String baseConditions = '(Test_Record__c = false OR Test_Record__c = null) AND Type__c IN (\'Worker Compensation\', \'Personal Injury\')';
+        String baseConditions = '(Test_Record__c = false OR Test_Record__c = null) AND Type__c IN :allowedTypes';
         
         if (showScheduledCalls == true) {
             // Scheduled calls: show future appointments
-            String statusCondition = '(litify_pm__Status__c IN (\'Lead Generated\', \'In Contact/Under Review\', \'Missed Appointment\', \'Intake Package Sent\', \'Attempting to Contact\', \'Questionnaire\') OR (litify_pm__Status__c = \'Intake Scheduled\' AND (litify_pm__Sign_Up_Method__c = \'E-Sign\' OR (litify_pm__Sign_Up_Method__c = \'Office\' AND Call_at_Date__c <= :twoHoursFromNow))))';
-            String whereClause = baseConditions + ' AND Call_at_Date__c > :now AND ' + statusCondition;
+            String statusCondition = '(litify_pm__Status__c IN (\'Lead Generated\', \'In Contact/Under Review\', \'Missed Appointment\', \'Intake Package Sent\', \'Attempting to Contact\', \'Questionnaire\') OR (litify_pm__Status__c = \'Intake Scheduled\' AND (litify_pm__Sign_Up_Method__c = \'E-Sign\' OR litify_pm__Sign_Up_Method__c = \'Office\')))';
+            String whereClause = baseConditions + ' AND ' + statusCondition + ' AND Call_at_Date__c >= :now AND Call_at_Date__c <= :twoHoursFromNow';
             return 'SELECT ' + REQUIRED_FIELDS + ' FROM litify_pm__Intake__c WHERE ' + whereClause;
         } else {
             // Ready to call: different time criteria per status
@@ -267,7 +280,11 @@ public with sharing class LeadQueueService {
                 '(litify_pm__Status__c = \'Questionnaire\' AND Call_at_Date__c <= :fourHoursAgo)' +
                 ' OR ' +
                 // Intake Scheduled: show if Call_at_Date__c <= now (no 4-hour restriction)
-                '(litify_pm__Status__c = \'Intake Scheduled\' AND (litify_pm__Sign_Up_Method__c = \'E-Sign\' OR (litify_pm__Sign_Up_Method__c = \'Office\' AND Call_at_Date__c <= :twoHoursFromNow)) AND Call_at_Date__c <= :now)' +
+                '(litify_pm__Status__c = \'Intake Scheduled\' AND (' +
+                    '(litify_pm__Sign_Up_Method__c = \'E-Sign\' AND Call_at_Date__c <= :now)' +
+                    ' OR ' +
+                    '(litify_pm__Sign_Up_Method__c = \'Office\' AND Call_at_Date__c >= :twoHoursAgo AND Call_at_Date__c <= :twoHoursFromNow)' +
+                '))' +
                 ')';
             
             String whereClause = baseConditions + ' AND ' + complexCondition;
@@ -280,9 +297,12 @@ public with sharing class LeadQueueService {
         
         Map<String, Object> bindVars = new Map<String, Object>();
         // Add the datetime bind variables for the base filter
-        bindVars.put('now', Datetime.now());
-        bindVars.put('twoHoursFromNow', Datetime.now().addHours(-2));
-        bindVars.put('fourHoursAgo', Datetime.now().addHours(-4));
+        Datetime nowValue = Datetime.now();
+        bindVars.put('now', nowValue);
+        bindVars.put('twoHoursAgo', nowValue.addHours(-2));
+        bindVars.put('twoHoursFromNow', nowValue.addHours(2));
+        bindVars.put('fourHoursAgo', nowValue.addHours(-4));
+        bindVars.put('allowedTypes', ALLOWED_INTAKE_TYPES);
         
         List<String> conditions = new List<String>();
         
@@ -477,7 +497,26 @@ public with sharing class LeadQueueService {
     private static Long getAssignmentTimestamp(String recordId) {
         try {
             Map<String, Object> assignmentData = getAssignmentData(recordId);
-            return assignmentData != null ? (Long) assignmentData.get('assignedAt') : null;
+            if (assignmentData == null || !assignmentData.containsKey('assignedAt')) {
+                return null;
+            }
+            
+            Object rawValue = assignmentData.get('assignedAt');
+            if (rawValue == null) {
+                return null;
+            }
+            
+            if (rawValue instanceof Long) {
+                return (Long) rawValue;
+            }
+            
+            try {
+                Decimal numericValue = Decimal.valueOf(String.valueOf(rawValue));
+                return numericValue != null ? numericValue.longValue() : null;
+            } catch (Exception parseError) {
+                System.debug('Assignment timestamp parse error for record ' + recordId + ': ' + parseError.getMessage());
+                return null;
+            }
         } catch (Exception e) {
             System.debug('Error getting assignment timestamp: ' + e.getMessage());
             return null;
@@ -517,7 +556,7 @@ public with sharing class LeadQueueService {
         switch on dueDateFilter {
             when 'today' { return 'Call_at_Date__c >= TODAY AND Call_at_Date__c < TOMORROW'; }
             when 'thisWeek' { return 'Call_at_Date__c >= THIS_WEEK AND Call_at_Date__c < NEXT_WEEK'; }
-            when 'nextWeek' { return 'Call_at_Date__c >= NEXT_WEEK AND Call_at_Date__c < NEXT_N_WEEKS:2'; }
+            when 'nextWeek' { return 'Call_at_Date__c = NEXT_WEEK'; }
             when else { return null; }
         }
     }

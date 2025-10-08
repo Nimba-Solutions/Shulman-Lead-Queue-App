@@ -64,6 +64,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     isAssigning = false;
     isReleasing = false;
     @track showScheduledCalls = false;
+    @track isLoadingState = false;
     
     refreshInterval;
     timerInterval;
@@ -84,9 +85,10 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     
     // Replace @wire with imperative calls to eliminate Aura compatibility layer
     async loadQueueData() {
+        this.filterRequestId++;
+        const currentRequestId = this.filterRequestId;
+        this.isLoadingState = true;
         try {
-            const currentRequestId = this.filterRequestId;
-            
             const result = await getQueueData({ 
                 statusFilter: this.statusFilter, 
                 caseTypeFilter: this.caseTypeFilter, 
@@ -96,10 +98,17 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
             
             // Only process if this is still the most recent request
             if (this.filterRequestId === currentRequestId) {
-                this.processQueueResponse(result);
+                if (result && result.success) {
+                    this.processQueueResponse(result);
+                } else {
+                    const message = result && result.errorMessage
+                        ? result.errorMessage
+                        : 'Failed to load lead queue.';
+                    this.showToast('Error', message, 'error');
+                }
             }
         } catch (error) {
-            if (this.filterRequestId === this.filterRequestId) {
+            if (this.filterRequestId === currentRequestId) {
                 // Clear data arrays but preserve user filter state for better UX
                 this.records = [];
                 this.originalRecords = [];
@@ -114,6 +123,10 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
                 this.isReleasing = false;
                 
                 this.showToast('Error', 'Failed to load lead queue: ' + this.getErrorMessage(error), 'error');
+            }
+        } finally {
+            if (this.filterRequestId === currentRequestId) {
+                this.isLoadingState = false;
             }
         }
     }
@@ -476,8 +489,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     }
     
     get isLoading() {
-        // Pure LWC approach - manage loading state manually if needed
-        return false; // Can add @track isLoadingState if loading spinner is needed
+        return this.isLoadingState;
     }
     
     get hasRecords() {
