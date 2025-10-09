@@ -160,67 +160,70 @@ export class DataProcessor {
                 label: 'Priority',
                 fieldName: 'priorityRank',
                 type: 'number',
-                cellAttributes: { alignment: 'center' },
-                initialWidth: 90
+                cellAttributes: { alignment: 'center', class: 'nowrap-cell' },
+                initialWidth: 90,
+                wrapText: false
             },
             {
                 label: 'Name',
-                type: 'url',
-                typeAttributes: {
-                    label: { fieldName: 'litify_pm__Display_Name__c' },
-                    target: '_self'
-                },
-                fieldName: 'recordUrl',
-                cellAttributes: { 
-                    alignment: 'left',
-                    class: 'name-url-cell'
-                },
-                initialWidth: 400
+                fieldName: 'litify_pm__Display_Name__c',
+                type: 'text',
+                cellAttributes: { class: 'link-cell' },
+                initialWidth: 300,
+                wrapText: false
             },
             {
                 label: 'Referred By',
                 fieldName: 'Referred_By_Name__c',
-                type: 'text'
+                type: 'text',
+                wrapText: false
             },
             {
                 label: 'Status',
                 fieldName: 'Status',
                 type: 'text',
+                wrapText: false
             },
             {
                 label: 'Case Type',
                 fieldName: 'CaseType',
                 type: 'text',
+                wrapText: false
             },
             {
                 label: 'Qualification Status',
                 fieldName: 'Qualification_Status__c',
                 type: 'text',
-                cellAttributes: { alignment: 'left' }
+                cellAttributes: { alignment: 'left' },
+                wrapText: false
             },
             {
                 label: 'Call Date and Time',
                 fieldName: 'callDateTime',
                 type: 'text',
                 sortable: true,
+                wrapText: false
             },
             {
                 label: 'Phone',
                 fieldName: 'Phone',
                 type: 'phone',
-                initialWidth: 130
+                initialWidth: 130,
+                wrapText: false
             },
             {
                 label: 'Currently Assigned',
                 fieldName: 'assignedTo',
                 type: 'text',
+                wrapText: false
             },
             {
                 label: 'Time Assigned',
                 fieldName: 'assignmentTimer',
                 type: 'text',
                 cellAttributes: { alignment: 'center' },
-                initialWidth: 80
+                initialWidth: 80,
+                wrapText: false
             },
             {
                 type: 'action',
@@ -232,12 +235,9 @@ export class DataProcessor {
     }
 
     getRowActions() {
-        const actions = [
+        return [
+            { label: 'Assign to Me', name: 'assign', iconName: 'utility:user' },
             { label: 'Open Record', name: 'open', iconName: 'utility:open' }
         ];
-        if (!this.component || this.component.isCacheReady) {
-            actions.unshift({ label: 'Assign to Me', name: 'assign', iconName: 'utility:user' });
-        }
-        return actions;
     }
 }

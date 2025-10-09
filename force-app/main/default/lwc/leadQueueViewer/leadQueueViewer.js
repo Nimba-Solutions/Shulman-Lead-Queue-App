@@ -144,7 +144,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
             const result = await isCacheConfigured();
             this.isCacheReady = result;
             if (!result) {
-                this.clearAssignmentsState();
+                this.clearAssignmentsState(true);
                 if (!this.hasShownCacheWarning) {
                     this.hasShownCacheWarning = true;
                     this.showToast('Error', 'Platform Cache not configured. Please contact your administrator.', 'error');
@@ -155,7 +155,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         } catch (error) {
             console.error('Cache health check failed:', error);
             this.isCacheReady = false;
-            this.clearAssignmentsState();
+            this.clearAssignmentsState(true);
             if (!this.hasShownCacheWarning) {
                 this.hasShownCacheWarning = true;
                 this.showToast('Error', 'Unable to verify Platform Cache configuration.', 'error');
@@ -163,7 +163,11 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         }
     }
     
-    clearAssignmentsState() {
+    clearAssignmentsState(preserveAssignmentData = false) {
+        if (preserveAssignmentData) {
+            this.hasAssignments = Array.isArray(this.userAssignedRecordIds) && this.userAssignedRecordIds.length > 0;
+            return;
+        }
         this.hasAssignments = false;
         this.userAssignedRecordIds = [];
         this.userAssignmentTimestamps = {};
@@ -207,7 +211,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
             if (this.isCacheReady) {
                 this.checkUserAssignments();
             } else {
-                this.clearAssignmentsState();
+                this.clearAssignmentsState(true);
             }
         }, SharedUtils.CONSTANTS.REFRESH_INTERVAL);
     }
@@ -403,7 +407,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     
     async checkUserAssignments() {
         if (!this.isCacheReady) {
-            this.clearAssignmentsState();
+            this.clearAssignmentsState(true);
             return;
         }
         try {
@@ -502,6 +506,22 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         this.handleClearFilters();
     }
     
+    openCacheSetup() {
+        this[NavigationMixin.Navigate]({
+            type: 'standard__webPage',
+            attributes: {
+                url: '/lightning/setup/PlatformCache/home'
+            }
+        });
+    }
+
+    handleOpenAssignedRecord() {
+        const recordId = this.assignedRecordId;
+        if (recordId) {
+            this.navigateToRecord(recordId);
+        }
+    }
+    
     navigateToRecord(recordId) {
         if (this.consoleNavigation) {
             this.consoleNavigation.navigateToRecord(recordId);
@@ -553,7 +573,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     }
     
     get areRowActionsDisabled() {
-        return this.isLoading || this.isAssigning || this.isReleasing || !this.isCacheReady;
+        return this.isLoading || this.isAssigning || this.isReleasing;
     }
     
     get assignButtonLabel() {
@@ -575,6 +595,10 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     get scheduledCallsVariant() {
         return this.showScheduledCalls ? 'brand' : 'neutral';
     }
+    
+    get showCacheWarning() {
+        return !this.isCacheReady;
+    }
 
     // Utility bar mode computed properties
     get showUtilityInterface() {
@@ -591,6 +615,13 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
 
     get assignedRecordDisplayName() {
         return this.timerManager ? this.timerManager.getAssignedRecordDisplayName() : '';
+    }
+
+    get assignedRecordId() {
+        if (Array.isArray(this.userAssignedRecordIds) && this.userAssignedRecordIds.length > 0) {
+            return this.userAssignedRecordIds[0];
+        }
+        return null;
     }
 
     get assignedRecordStatus() {

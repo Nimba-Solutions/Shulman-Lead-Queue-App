@@ -10,6 +10,35 @@
     pointer-events: none;
 }
 
+.cache-warning {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: #fef7e0;
+    border: 1px solid #ffb75d;
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    margin: 0.5rem 0 1rem;
+    pointer-events: auto;
+}
+
+.cache-warning-icon {
+    --slds-c-icon-color-foreground-default: #ffb75d;
+}
+
+.cache-warning-content {
+    flex: 1;
+    font-size: 0.875rem;
+    color: #514f4d;
+}
+
+.cache-warning-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    pointer-events: auto;
+}
+
 /* Card-based layout with subtle borders and shadows */
 .utility-card {
     background: #ffffff;
@@ -34,17 +63,16 @@
 }
 
 /* Record name styling - matches Salesforce standard record text */
-.assigned-record-name {
-    font-size: 0.8125rem;
-    font-weight: 400;
-    color: #0176d3;
+.assigned-record-link {
+    --slds-c-button-font-size: 0.8125rem;
+    --slds-c-button-text-color: #0176d3;
+    --slds-c-button-font-weight: 400;
+    --slds-c-button-line-height: 0.25;
+    --slds-c-button-spacing-inline-start: 0;
+    --slds-c-button-spacing-inline-end: 0;
+    pointer-events: auto;
     text-align: left;
     margin: 4px 0 6px 0;
-    overflow: visible;
-    white-space: normal;
-    word-wrap: break-word;
-    line-height: 1.25;
-    text-decoration: none;
 }
 
 /* Status text styling */
@@ -269,21 +297,27 @@
 }
 
 /* URL link styling for Name column */
-lightning-datatable .name-url-cell a {
+:host ::deep .link-cell {
     color: #0176d3;
     text-decoration: underline;
+    cursor: pointer;
 }
 
-lightning-datatable .name-url-cell a:hover,
-lightning-datatable .name-url-cell a:focus {
+:host ::deep .link-cell:hover,
+:host ::deep .link-cell:focus {
     color: #014486;
-    outline: 2px solid #0176d3;
-    outline-offset: 2px;
 }
 
-/* Control text wrapping in datatable cells with hover tooltip support */
-lightning-datatable tbody tr td,
-lightning-datatable tbody tr th {
+:host ::deep .link-cell .slds-truncate {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+}
+
+/* Control text wrapping in datatable cells */
+:host ::deep lightning-datatable tbody tr td,
+:host ::deep lightning-datatable tbody tr th {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -291,15 +325,4 @@ lightning-datatable tbody tr th {
     position: relative;
 }
 
-/* Show full text on hover for better UX */
-lightning-datatable tbody tr td:hover,
-lightning-datatable tbody tr th:hover {
-    overflow: visible;
-    white-space: normal;
-    word-wrap: break-word;
-    background-color: #fafafa;
-    z-index: 10;
-    border: 1px solid #e5e5e5;
-    padding: 0.5rem;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
+

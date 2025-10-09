@@ -1,6 +1,17 @@
 <template>
     <!-- Utility Bar Compact Interface -->
     <template if:true={showUtilityInterface}>
+        <template if:true={showCacheWarning}>
+            <div class="cache-warning" role="alert">
+                <lightning-icon icon-name="utility:warning" alternative-text="Cache warning" size="small" class="cache-warning-icon"></lightning-icon>
+                <div class="cache-warning-content">
+                    <strong>Platform Cache unavailable.</strong> Assignments are paused until the cache partition is configured.
+                </div>
+                <div class="cache-warning-actions">
+                    <lightning-button variant="base" label="Open Setup" onclick={openCacheSetup}></lightning-button>
+                </div>
+            </div>
+        </template>
         <div class="utility-container">
             <!-- Show Get Next Record button when NO assignments -->
             <template if:false={hasAssignments}>
@@ -30,7 +41,12 @@
                 </div>
                 
                 <div class="utility-card assigned-card">
-                    <div class="assigned-record-name">{assignedRecordDisplayName}</div>
+                    <lightning-button 
+                        variant="base"
+                        label={assignedRecordDisplayName}
+                        onclick={handleOpenAssignedRecord}
+                        class="assigned-record-link">
+                    </lightning-button>
                     <div class="assigned-record-status" if:true={assignedRecordStatus}>
                         {assignedRecordStatus}
                     </div>
@@ -43,6 +59,17 @@
     <!-- Existing Full Interface -->
     <template if:false={showUtilityInterface}>
     <lightning-card>
+        <template if:true={showCacheWarning}>
+            <div class="cache-warning" role="alert">
+                <lightning-icon icon-name="utility:warning" alternative-text="Cache warning" size="small" class="cache-warning-icon"></lightning-icon>
+                <div class="cache-warning-content">
+                    <strong>Platform Cache unavailable.</strong> Assignments are paused until admins configure the cache partition.
+                </div>
+                <div class="cache-warning-actions">
+                    <lightning-button variant="base" label="Open Setup" onclick={openCacheSetup}></lightning-button>
+                </div>
+            </div>
+        </template>
         
         <!-- Statistics Dashboard -->
         <div class="stats-container">

@@ -271,8 +271,7 @@ private class LeadQueueServiceTest {
     @IsTest
     static void testAssignmentWithSimulatedCache() {
         litify_pm__Intake__c testRecord = [SELECT Id FROM litify_pm__Intake__c LIMIT 1];
-        LeadQueueService.simulateCacheAvailability = true;
-        LeadQueueService.resetSimulatedCache();
+        LeadQueueService.enableCacheSimulation(true);
         try {
             Test.startTest();
             LeadQueueService.AssignmentResult result = LeadQueueService.assignRecord(testRecord.Id);
@@ -281,12 +280,14 @@ private class LeadQueueServiceTest {
             Assert.isTrue(result.success, 'Assignment should succeed with simulated cache: ' + result.message);
             Assert.isTrue(LeadQueueService.isCacheConfigured(), 'Simulation should report cache as configured');
             
+            Map<String, Long> beforeRelease = LeadQueueService.getUserAssignmentData();
+            Assert.isFalse(beforeRelease.isEmpty(), 'Simulated cache should store assignment data before release');
+            
             LeadQueueService.autoReleaseRecords(new List<Id>{testRecord.Id});
             Map<String, Long> afterRelease = LeadQueueService.getUserAssignmentData();
             Assert.isTrue(afterRelease.isEmpty(), 'Simulated cache should release assignments when auto-released');
         } finally {
-            LeadQueueService.simulateCacheAvailability = false;
-            LeadQueueService.resetSimulatedCache();
+            LeadQueueService.enableCacheSimulation(false);
         }
     }
     
@@ -329,20 +330,61 @@ private class LeadQueueServiceTest {
     
     @IsTest
     static void testNextWeekFilterReturnsRecords() {
+        Date startOfNextWeek = Date.today().toStartOfWeek().addDays(7);
+        Date targetDate = startOfNextWeek.addDays(1);
+        Datetime followUpTime = Datetime.newInstance(targetDate, Time.newInstance(9, 0, 0, 0));
         litify_pm__Intake__c futureIntake = new litify_pm__Intake__c(
-            litify_pm__Status__c = 'Lead Generated',
-            Type__c = 'Worker Compensation',
+            litify_pm__Status__c = 'Intake Scheduled',
+            Type__c = 'Personal Injury',
+            Case_Type__c = 'MVA',
             litify_pm__Phone__c = '555-NEXT-WEEK',
             litify_pm__Sign_Up_Method__c = 'E-Sign',
-            Follow_Up_Date_Time__c = Datetime.newInstance(Date.today().addDays(7), Time.newInstance(9, 0, 0, 0))
+            Follow_Up_Date_Time__c = followUpTime,
+            Appointment_Date__c = followUpTime
         );
         insert futureIntake;
         
-        Test.startTest();
-        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', 'nextWeek', false);
-        Test.stopTest();
+        User runAsUser = new User(
+            Alias = 'lqtusr',
+            Email = 'lqtusr' + System.currentTimeMillis() + '@example.com',
+            EmailEncodingKey = 'UTF-8',
+            LastName = 'Queue',
+            LanguageLocaleKey = 'en_US',
+            LocaleSidKey = 'en_US',
+            TimeZoneSidKey = 'America/New_York',
+            Username = 'lqtusr' + System.currentTimeMillis() + '@example.com',
+            ProfileId = UserInfo.getProfileId()
+        );
+        insert runAsUser;
         
-        Assert.isTrue(response.success, 'Next week filter should return a successful response');
+        PermissionSet queueAccess = [
+            SELECT Id
+            FROM PermissionSet
+            WHERE Name = 'LeadQueue_Access'
+            LIMIT 1
+        ];
+        insert new PermissionSetAssignment(PermissionSetId = queueAccess.Id, AssigneeId = runAsUser.Id);
+
+        LeadQueueService.QueueResponse response;
+        Datetime runAsCallDate;
+        String runAsCaseType;
+        System.runAs(runAsUser) {
+            Test.startTest();
+            response = LeadQueueService.getQueueData('', '', 'nextWeek', true);
+            Test.stopTest();
+            System.assertEquals(true, response.success, 'Next week query should succeed for permitted user: ' + response.errorMessage);
+            litify_pm__Intake__c runAsRecord = [
+                SELECT Call_at_Date__c, Case_Type_Reporting__c
+                FROM litify_pm__Intake__c
+                WHERE Id = :futureIntake.Id
+                LIMIT 1
+            ];
+            runAsCallDate = runAsRecord.Call_at_Date__c;
+            runAsCaseType = runAsRecord.Case_Type_Reporting__c;
+        }
+
+        System.assertEquals(followUpTime, runAsCallDate, 'Call at date should reflect the staged follow-up time');
+        System.assertEquals('MVA', runAsCaseType, 'Case type reporting should map to the dependent value');
     }
     
     @IsTest

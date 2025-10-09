@@ -33,6 +33,7 @@ public with sharing class LeadQueueService {
     private static final Integer MEDIUM_PRIORITY_THRESHOLD = 55;
     private static final String BASE_ORDER_BY = 'ORDER BY Priority_Score__c ASC, Call_at_Date__c ASC';
     private static final String REQUIRED_FIELDS = 'Id, Name, litify_pm__Display_Name__c, Referred_By_Name__c, litify_pm__Status__c, Priority_Score__c, CreatedDate, Case_Type_Reporting__c, Type__c, Call_at_Date__c, litify_pm__Phone__c, litify_pm__Sign_Up_Method__c, Test_Record__c, Qualification_Status__c';
+    private static final Set<String> REQUIRED_FIELD_SET = buildRequiredFieldSet();
     private static final String ASSIGNMENT_CACHE_PREFIX = 'assign';
     private static final String USER_CACHE_PREFIX = 'user';
 
@@ -50,6 +51,30 @@ public with sharing class LeadQueueService {
         simulatedRecordAssignments.clear();
         simulatedUserAssignments.clear();
         simulatedAssignmentTimestamps.clear();
+    }
+    
+    @TestVisible
+    static void enableCacheSimulation(Boolean shouldSimulate) {
+        System.assert(Test.isRunningTest(), 'Cache simulation can only be enabled during tests');
+        simulateCacheAvailability = shouldSimulate;
+        if (!shouldSimulate) {
+            resetSimulatedCache();
+        }
+    }
+    
+    private static Set<String> buildRequiredFieldSet() {
+        Set<String> fields = new Set<String>();
+        for (String token : REQUIRED_FIELDS.split(',')) {
+            String fieldName = token.trim();
+            if (String.isBlank(fieldName)) {
+                continue;
+            }
+            if (fieldName.equalsIgnoreCase('Id') || fieldName.equalsIgnoreCase('Name') || fieldName.equalsIgnoreCase('CreatedDate')) {
+                continue;
+            }
+            fields.add(fieldName);
+        }
+        return fields;
     }
     
     @AuraEnabled
@@ -663,32 +688,17 @@ public with sharing class LeadQueueService {
     }
     
     private static void validateFieldAccess() {
-        try {
-            Map<String, Schema.SObjectField> fieldMap = Schema.sObjectType.litify_pm__Intake__c.fields.getMap();
-            List<String> fields = new List<String>{
-                'litify_pm__Status__c',
-                'Case_Type_Reporting__c',
-                'Call_at_Date__c',
-                'litify_pm__Phone__c',
-                'Priority_Score__c',
-                'litify_pm__Display_Name__c',
-                'Referred_By_Name__c',
-                'litify_pm__Sign_Up_Method__c',
-                'Test_Record__c',
-                'Qualification_Status__c',
-                'Type__c'
-            };
-            
-            for (String field : fields) {
-                Boolean fieldExists = fieldMap.containsKey(field);
-                Boolean fieldAccessible = fieldExists ? fieldMap.get(field).getDescribe().isAccessible() : false;
-                
-                if (!fieldExists || !fieldAccessible) {
-                    throw new AuraHandledException('Access denied to required field: ' + field + '. Please contact your administrator for field permissions.');
-                }
+        Map<String, Schema.SObjectField> fieldMap = Schema.sObjectType.litify_pm__Intake__c.fields.getMap();
+        List<String> missingFields = new List<String>();
+        
+        for (String fieldName : REQUIRED_FIELD_SET) {
+            if (!fieldMap.containsKey(fieldName) || !fieldMap.get(fieldName).getDescribe().isAccessible()) {
+                missingFields.add(fieldName);
             }
-        } catch (Exception e) {
-            throw e;
+        }
+        
+        if (!missingFields.isEmpty()) {
+            throw new AuraHandledException('Access denied to required field(s): ' + String.join(missingFields, ', ') + '. Please contact your administrator for field permissions.');
         }
     }
     
