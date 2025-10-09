@@ -73,6 +73,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     // Removed wiredQueueResult - pure LWC approach without Aura compatibility layer
     filterTimeout;
     filterRequestId = 0;
+    hasInitialLoadCompleted = false;
     
     // Console navigation detection
     @wire(IsConsoleNavigation) isConsoleNavigation;
@@ -86,10 +87,14 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     }
     
     // Replace @wire with imperative calls to eliminate Aura compatibility layer
-    async loadQueueData() {
+    async loadQueueData(options = {}) {
+        const { useSoftRefresh = false } = options;
         this.filterRequestId++;
         const currentRequestId = this.filterRequestId;
-        this.isLoadingState = true;
+        const shouldShowSpinner = !useSoftRefresh || !this.hasInitialLoadCompleted;
+        if (shouldShowSpinner) {
+            this.isLoadingState = true;
+        }
         try {
             const result = await getQueueData({ 
                 statusFilter: this.statusFilter, 
@@ -102,6 +107,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
             if (this.filterRequestId === currentRequestId) {
                 if (result && result.success) {
                     this.processQueueResponse(result);
+                    this.hasInitialLoadCompleted = true;
                 } else {
                     const message = result && result.errorMessage
                         ? result.errorMessage
@@ -125,6 +131,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
                 this.isReleasing = false;
                 
                 this.showToast('Error', 'Failed to load lead queue: ' + this.getErrorMessage(error), 'error');
+                this.hasInitialLoadCompleted = false;
             }
         } finally {
             if (this.filterRequestId === currentRequestId) {
@@ -275,9 +282,10 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     }
     
     
-    async handleRefresh() {
-        // Pure LWC refresh - no Aura compatibility layer
-        await this.loadQueueData();
+    async handleRefresh(event) {
+        // Use a soft refresh when invoked by background timers (no event payload)
+        const useSoftRefresh = !event;
+        await this.loadQueueData({ useSoftRefresh });
     }
     
     async handleAssignNext() {
@@ -304,7 +312,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
                 
                 // Refresh data and assignments in parallel (pure LWC approach)
                 Promise.all([
-                    this.loadQueueData(),
+                    this.loadQueueData({ useSoftRefresh: true }),
                     this.checkUserAssignments()
                 ]).then(() => {
                     // Force re-render of utility interface
@@ -361,7 +369,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
                 
                 // Refresh data and assignments in parallel (pure LWC approach)
                 Promise.all([
-                    this.loadQueueData(),
+                    this.loadQueueData({ useSoftRefresh: true }),
                     this.checkUserAssignments()
                 ]).then(() => {
                     // Force re-render of utility interface
