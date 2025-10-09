@@ -43,8 +43,7 @@ export class TimerManager {
                 
                 return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
             } catch (error) {
-                console.log('Could not parse server assignment timestamp:', error);
-                console.log('Timestamp value:', assignedTimestamp, 'Type:', typeof assignedTimestamp);
+                // Fall through to default label without spamming console output
             }
         }
         
@@ -110,8 +109,6 @@ export class TimerManager {
             
             return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
         } catch (error) {
-            console.log('Could not parse assignment timestamp:', error);
-            console.log('Timestamp value:', assignmentTimestamp, 'Type:', typeof assignmentTimestamp);
             return null;
         }
     }

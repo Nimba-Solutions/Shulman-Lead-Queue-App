@@ -75,6 +75,7 @@ public with sharing class LeadQueueService {
         try {
             // Query multiple records to handle assignment conflicts based on current view
             List<litify_pm__Intake__c> records = getAvailableRecords(10, '', '', '', showScheduledCalls);
+            String failureMessage = null;
             
             if (records.isEmpty()) {
                 return new AssignmentResult(false, 'No available records in queue');
@@ -88,11 +89,16 @@ public with sharing class LeadQueueService {
                         result.recordId = record.Id;
                         result.recordName = record.Name;
                         return result;
+                    } else if (!String.isBlank(result.message)) {
+                        failureMessage = result.message;
+                        if (result.message.contains('Platform Cache')) {
+                            return new AssignmentResult(false, failureMessage);
+                        }
                     }
                 }
             }
             
-            return new AssignmentResult(false, 'No available records could be assigned');
+            return new AssignmentResult(false, failureMessage != null ? failureMessage : 'No available records could be assigned');
         } catch (Exception e) {
             System.debug('Assignment next error: ' + e.getMessage());
             return new AssignmentResult(false, 'Assignment failed');
@@ -125,10 +131,10 @@ public with sharing class LeadQueueService {
             String userId = UserInfo.getUserId();
             Cache.OrgPartition orgCache = getCachePartition();
             
-            // If cache is unavailable, allow assignment with warning
+            // If cache is unavailable, fail fast so users cannot take multiple records
             if (orgCache == null) {
-                System.debug('LeadQueueService.assignRecord: Platform Cache unavailable for user ' + userId + ' - assignment tracking limited for record ' + recordId);
-                return new AssignmentResult(true, 'Record assigned (cache unavailable - assignment tracking limited)');
+                System.debug('LeadQueueService.assignRecord: Platform Cache unavailable for user ' + userId + ' and record ' + recordId);
+                return new AssignmentResult(false, 'Platform Cache not configured. Please contact your administrator.');
             }
             
             // Check if record is already assigned

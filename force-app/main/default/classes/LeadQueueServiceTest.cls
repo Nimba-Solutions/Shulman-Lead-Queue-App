@@ -165,15 +165,20 @@ private class LeadQueueServiceTest {
         Test.startTest();
         // First assignment should succeed
         LeadQueueService.AssignmentResult result1 = LeadQueueService.assignRecord(testRecord.Id);
+        if (isCacheUnavailable(result1)) {
+            Test.stopTest();
+            Assert.isTrue(result1.message.contains('Platform Cache not configured'), 'Should report missing Platform Cache');
+            return;
+        }
         Assert.isTrue(result1.success, 'First assignment should succeed');
         
         // Second assignment should fail if cache is available, otherwise may succeed with warning
         LeadQueueService.AssignmentResult result2 = LeadQueueService.assignRecord(testRecord.Id);
         if (!result2.success) {
-            Assert.isTrue(result2.message.contains('already assigned'), 'Should indicate record is already assigned');
+            Assert.isTrue(result2.message.contains('already assigned') || result2.message.contains('Platform Cache not configured'),
+                'Should indicate existing assignment or missing cache');
         } else {
-            // Cache may be unavailable in test environment
-            Assert.isTrue(result2.message.contains('cache unavailable'), 'Should indicate cache limitations');
+            Assert.fail('Second assignment should not succeed when cache is enforcing concurrency');
         }
         Test.stopTest();
     }
@@ -220,7 +225,8 @@ private class LeadQueueServiceTest {
             Assert.isNotNull(result.recordId, 'Record ID should be populated when assignment succeeds');
             Assert.isNotNull(result.recordName, 'Record name should be populated when assignment succeeds');
         } else {
-            Assert.isTrue(result.message.contains('No available records'), 'Should indicate no records available when none meet criteria');
+            Assert.isTrue(result.message != null && (result.message.contains('No available records') || result.message.contains('Platform Cache not configured')),
+                'Should indicate no records available or missing cache when assignment fails: ' + result.message);
         }
         
         // Test scheduled calls assignment
@@ -247,16 +253,19 @@ private class LeadQueueServiceTest {
         Test.startTest();
         // Test assignment creates cache entry (or handles cache unavailability)
         LeadQueueService.AssignmentResult result = LeadQueueService.assignRecord(testRecord.Id);
-        Assert.isTrue(result.success, 'Assignment should succeed or handle cache unavailability gracefully');
-        
-        // Test user has assignments (may be empty if cache unavailable)
         List<String> assignedIds = LeadQueueService.getUserAssignedRecordIds();
-        Assert.isNotNull(assignedIds, 'Should return non-null list even if cache unavailable');
-        
-        // Test release clears cache
         Boolean releaseResult = LeadQueueService.releaseUserAssignments();
         Assert.isTrue(releaseResult, 'Release should succeed');
         Test.stopTest();
+
+        if (isCacheUnavailable(result)) {
+            Assert.isTrue(result.message.contains('Platform Cache not configured'), 'Should report missing Platform Cache');
+            Assert.isNotNull(assignedIds, 'Should return non-null list even if Platform Cache is unavailable');
+            return;
+        }
+        
+        Assert.isTrue(result.success, 'Assignment should succeed when Platform Cache is available');
+        Assert.isNotNull(assignedIds, 'Should return non-null list when cache is available');
     }
     
     
@@ -303,15 +312,20 @@ private class LeadQueueServiceTest {
         Test.startTest();
         // First assignment should succeed
         LeadQueueService.AssignmentResult result1 = LeadQueueService.assignRecord(testRecords[0].Id);
+        if (isCacheUnavailable(result1)) {
+            Test.stopTest();
+            Assert.isTrue(result1.message.contains('Platform Cache not configured'), 'Should report missing Platform Cache');
+            return;
+        }
         Assert.isTrue(result1.success, 'First assignment should succeed');
         
         // Second assignment should fail if cache is available, otherwise may succeed with warning
         LeadQueueService.AssignmentResult result2 = LeadQueueService.assignRecord(testRecords[1].Id);
         if (!result2.success) {
-            Assert.isTrue(result2.message.contains('already has an assigned record'), 'Should indicate user already has assignment');
+            Assert.isTrue(result2.message.contains('already has an assigned record') || result2.message.contains('Platform Cache not configured'),
+                'Should indicate user already has assignment or missing cache');
         } else {
-            // Cache may be unavailable in test environment
-            Assert.isTrue(result2.message.contains('cache unavailable'), 'Should indicate cache limitations');
+            Assert.fail('Second assignment should not succeed when cache is enforcing concurrency');
         }
         Test.stopTest();
     }
@@ -1012,6 +1026,11 @@ private class LeadQueueServiceTest {
         Test.startTest();
         LeadQueueService.AssignmentResult result = LeadQueueService.assignRecord(wcPiRecord.Id);
         Test.stopTest();
+
+        if (isCacheUnavailable(result)) {
+            Assert.isTrue(result.message.contains('Platform Cache not configured'), 'Should report missing Platform Cache');
+            return;
+        }
         
         Assert.isTrue(result.success, 'WC & PI record should be assignable: ' + result.message);
     }
@@ -1022,16 +1041,18 @@ private class LeadQueueServiceTest {
         
         Test.startTest();
         LeadQueueService.AssignmentResult firstAssignment = LeadQueueService.assignRecord(testRecord.Id);
+        if (isCacheUnavailable(firstAssignment)) {
+            Test.stopTest();
+            Assert.isTrue(firstAssignment.message.contains('Platform Cache not configured'), 'Should report missing Platform Cache');
+            return;
+        }
         LeadQueueService.autoReleaseRecords(new List<Id>{testRecord.Id});
         LeadQueueService.AssignmentResult secondAssignment = LeadQueueService.assignRecord(testRecord.Id);
         Test.stopTest();
         
-        // If cache is unavailable the service returns a soft-success message; otherwise reassignment should succeed normally.
         Assert.isTrue(secondAssignment.success, 'Record should be reassignable after auto-release');
-        if (firstAssignment.success && (firstAssignment.message == null || !firstAssignment.message.contains('cache unavailable'))) {
-            Assert.isTrue(secondAssignment.message == null || !secondAssignment.message.contains('already has an assigned record'),
-                'Auto-release must clear user assignment cache when available');
-        }
+        Assert.isTrue(secondAssignment.message == null || !secondAssignment.message.contains('already has an assigned record'),
+            'Auto-release must clear user assignment cache when available');
     }
 
     @IsTest
@@ -1043,6 +1064,11 @@ private class LeadQueueServiceTest {
         Map<String, Long> assignmentData = LeadQueueService.getUserAssignmentData();
         Test.stopTest();
         
+        if (isCacheUnavailable(result)) {
+            Assert.isTrue(result.message.contains('Platform Cache not configured'), 'Should report missing Platform Cache');
+            return;
+        }
+
         Assert.isTrue(result.success, 'Assignment should succeed to capture timestamp');
         Assert.isFalse(assignmentData.isEmpty(), 'Assignment map should include the assigned record');
         Long assignedAt = assignmentData.values()[0];
@@ -1050,5 +1076,12 @@ private class LeadQueueServiceTest {
         
         // Cleanup to avoid impacting subsequent tests
         LeadQueueService.releaseUserAssignments();
+    }
+
+    private static Boolean isCacheUnavailable(LeadQueueService.AssignmentResult result) {
+        return result != null
+            && !result.success
+            && result.message != null
+            && result.message.contains('Platform Cache not configured');
     }
 }
