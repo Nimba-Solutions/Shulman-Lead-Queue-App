@@ -225,11 +225,19 @@ export class DataProcessor {
             {
                 type: 'action',
                 typeAttributes: {
-                    rowActions: [
-                        { label: 'Assign to Me', name: 'assign', iconName: 'utility:user' }
-                    ]
+                    rowActions: this.getRowActions()
                 }
             }
         ];
+    }
+
+    getRowActions() {
+        const actions = [
+            { label: 'Open Record', name: 'open', iconName: 'utility:open' }
+        ];
+        if (!this.component || this.component.isCacheReady) {
+            actions.unshift({ label: 'Assign to Me', name: 'assign', iconName: 'utility:user' });
+        }
+        return actions;
     }
 }

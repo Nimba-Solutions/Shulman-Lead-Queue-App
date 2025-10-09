@@ -23,7 +23,8 @@ public with sharing class LeadQueueService {
     private static final Set<String> ALLOWED_INTAKE_TYPES = new Set<String>{
         'Worker Compensation',
         'Personal Injury',
-        'WC & PI'
+        'WC & PI',
+        'Other'
     };
     
     private static final Integer ASSIGNMENT_TTL = 1800; // 30 minutes
@@ -34,6 +35,22 @@ public with sharing class LeadQueueService {
     private static final String REQUIRED_FIELDS = 'Id, Name, litify_pm__Display_Name__c, Referred_By_Name__c, litify_pm__Status__c, Priority_Score__c, CreatedDate, Case_Type_Reporting__c, Type__c, Call_at_Date__c, litify_pm__Phone__c, litify_pm__Sign_Up_Method__c, Test_Record__c, Qualification_Status__c';
     private static final String ASSIGNMENT_CACHE_PREFIX = 'assign';
     private static final String USER_CACHE_PREFIX = 'user';
+
+    @TestVisible private static Boolean simulateCacheAvailability = false;
+    @TestVisible private static Map<String, String> simulatedRecordAssignments = new Map<String, String>();
+    @TestVisible private static Map<String, String> simulatedUserAssignments = new Map<String, String>();
+    @TestVisible private static Map<String, Long> simulatedAssignmentTimestamps = new Map<String, Long>();
+    
+    private static Boolean isSimulatedCacheActive() {
+        return Test.isRunningTest() && simulateCacheAvailability;
+    }
+    
+    @TestVisible
+    static void resetSimulatedCache() {
+        simulatedRecordAssignments.clear();
+        simulatedUserAssignments.clear();
+        simulatedAssignmentTimestamps.clear();
+    }
     
     @AuraEnabled
     public static QueueResponse getQueueData(String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls) {
@@ -71,10 +88,10 @@ public with sharing class LeadQueueService {
     }
     
     @AuraEnabled
-    public static AssignmentResult assignNextAvailableRecord(Boolean showScheduledCalls) {
+    public static AssignmentResult assignNextAvailableRecord(String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls) {
         try {
             // Query multiple records to handle assignment conflicts based on current view
-            List<litify_pm__Intake__c> records = getAvailableRecords(10, '', '', '', showScheduledCalls);
+            List<litify_pm__Intake__c> records = getAvailableRecords(10, statusFilter, caseTypeFilter, dueDateFilter, showScheduledCalls);
             String failureMessage = null;
             
             if (records.isEmpty()) {
@@ -105,6 +122,11 @@ public with sharing class LeadQueueService {
         }
     }
     
+    @AuraEnabled(cacheable=true)
+    public static Boolean isCacheConfigured() {
+        return getCachePartition() != null || isSimulatedCacheActive();
+    }
+    
     @AuraEnabled
     public static AssignmentResult assignRecord(String recordId) {
         try {
@@ -130,9 +152,10 @@ public with sharing class LeadQueueService {
             
             String userId = UserInfo.getUserId();
             Cache.OrgPartition orgCache = getCachePartition();
+            Boolean useSimulatedCache = orgCache == null && isSimulatedCacheActive();
             
             // If cache is unavailable, fail fast so users cannot take multiple records
-            if (orgCache == null) {
+            if (orgCache == null && !useSimulatedCache) {
                 System.debug('LeadQueueService.assignRecord: Platform Cache unavailable for user ' + userId + ' and record ' + recordId);
                 return new AssignmentResult(false, 'Platform Cache not configured. Please contact your administrator.');
             }
@@ -140,6 +163,17 @@ public with sharing class LeadQueueService {
             // Check if record is already assigned
             if (isRecordAssigned(recordId)) {
                 return new AssignmentResult(false, 'Record already assigned to another user');
+            }
+            
+            if (useSimulatedCache) {
+                if (simulatedUserAssignments.containsKey(userId)) {
+                    return new AssignmentResult(false, 'User already has an assigned record. Release current assignment first.');
+                }
+                Long assignedAt = Datetime.now().getTime();
+                simulatedRecordAssignments.put(recordId, userId);
+                simulatedUserAssignments.put(userId, recordId);
+                simulatedAssignmentTimestamps.put(recordId, assignedAt);
+                return new AssignmentResult(true, 'Record assigned successfully');
             }
             
             // Check if user already has an assignment to prevent multiple assignments
@@ -168,6 +202,18 @@ public with sharing class LeadQueueService {
         try {
             String userId = UserInfo.getUserId();
             Cache.OrgPartition orgCache = getCachePartition();
+            Boolean useSimulatedCache = orgCache == null && isSimulatedCacheActive();
+            
+            if (useSimulatedCache) {
+                String assignedRecord = simulatedUserAssignments.get(userId);
+                if (assignedRecord != null) {
+                    simulatedRecordAssignments.remove(assignedRecord);
+                    simulatedAssignmentTimestamps.remove(assignedRecord);
+                }
+                simulatedUserAssignments.remove(userId);
+                return true;
+            }
+            
             if (orgCache != null) {
                 String assignedRecord = (String) orgCache.get(USER_CACHE_PREFIX + userId);
                 
@@ -190,8 +236,11 @@ public with sharing class LeadQueueService {
         try {
             String userId = UserInfo.getUserId();
             Cache.OrgPartition orgCache = getCachePartition();
+            Boolean useSimulatedCache = orgCache == null && isSimulatedCacheActive();
             String assignedRecordId = null;
-            if (orgCache != null) {
+            if (useSimulatedCache) {
+                assignedRecordId = simulatedUserAssignments.get(userId);
+            } else if (orgCache != null) {
                 assignedRecordId = (String) orgCache.get(USER_CACHE_PREFIX + userId);
             }
             
@@ -219,8 +268,21 @@ public with sharing class LeadQueueService {
     public static void autoReleaseRecords(List<Id> recordIds) {
         try {
             Cache.OrgPartition orgCache = getCachePartition();
-            if (orgCache == null) {
+            Boolean useSimulatedCache = orgCache == null && isSimulatedCacheActive();
+            if (orgCache == null && !useSimulatedCache) {
                 System.debug('LeadQueueService.autoReleaseRecords: Platform Cache unavailable - assignment tracking limited for ' + recordIds.size() + ' records');
+                return;
+            }
+            
+            if (useSimulatedCache) {
+                for (Id recordId : recordIds) {
+                    String assignedUserId = simulatedRecordAssignments.remove(recordId);
+                    simulatedAssignmentTimestamps.remove(recordId);
+                    if (!String.isBlank(assignedUserId)) {
+                        simulatedUserAssignments.remove(assignedUserId);
+                        System.debug('Auto-released record (simulated cache): ' + recordId + ' from user: ' + assignedUserId);
+                    }
+                }
                 return;
             }
             
@@ -268,15 +330,31 @@ public with sharing class LeadQueueService {
         }
     }
     
-    private static String buildBaseQuery(Boolean showScheduledCalls) {
+    private static String buildBaseQuery(Boolean showScheduledCalls, Boolean allowFutureWindow) {
         String baseConditions = '(Test_Record__c = false OR Test_Record__c = null) AND Type__c IN :allowedTypes';
         
         if (showScheduledCalls == true) {
             // Scheduled calls: show future appointments
             String statusCondition = '(litify_pm__Status__c IN (\'Lead Generated\', \'In Contact/Under Review\', \'Missed Appointment\', \'Intake Package Sent\', \'Attempting to Contact\', \'Questionnaire\') OR (litify_pm__Status__c = \'Intake Scheduled\' AND (litify_pm__Sign_Up_Method__c = \'E-Sign\' OR litify_pm__Sign_Up_Method__c = \'Office\')))';
-            String whereClause = baseConditions + ' AND ' + statusCondition + ' AND Call_at_Date__c >= :now AND Call_at_Date__c <= :twoHoursFromNow';
+            String timeClause = allowFutureWindow
+                ? 'Call_at_Date__c >= :now AND Call_at_Date__c <= :twoWeeksFromNow'
+                : 'Call_at_Date__c >= :now AND Call_at_Date__c <= :twoHoursFromNow';
+            String whereClause = baseConditions + ' AND ' + statusCondition + ' AND ' + timeClause;
             return 'SELECT ' + REQUIRED_FIELDS + ' FROM litify_pm__Intake__c WHERE ' + whereClause;
         } else {
+            if (allowFutureWindow) {
+                String futureCondition = '(' +
+                    '(litify_pm__Status__c IN (\'Lead Generated\', \'In Contact/Under Review\', \'Missed Appointment\', \'Intake Package Sent\', \'Attempting to Contact\'))' +
+                    ' OR ' +
+                    '(litify_pm__Status__c = \'Questionnaire\')' +
+                    ' OR ' +
+                    '(litify_pm__Status__c = \'Intake Scheduled\')' +
+                ')';
+                
+                String whereClause = baseConditions + ' AND ' + futureCondition;
+                return 'SELECT ' + REQUIRED_FIELDS + ' FROM litify_pm__Intake__c WHERE ' + whereClause;
+            }
+            
             // Ready to call: different time criteria per status
             String complexCondition = '(' +
                 // Standard statuses: show if Call_at_Date__c <= now
@@ -299,7 +377,8 @@ public with sharing class LeadQueueService {
     }
     
     private static List<litify_pm__Intake__c> getAvailableRecords(Integer limitCount, String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls) {
-        String query = buildBaseQuery(showScheduledCalls);
+        Boolean allowFutureWindow = 'nextWeek'.equalsIgnoreCase(dueDateFilter);
+        String query = buildBaseQuery(showScheduledCalls, allowFutureWindow);
         
         Map<String, Object> bindVars = new Map<String, Object>();
         // Add the datetime bind variables for the base filter
@@ -308,6 +387,7 @@ public with sharing class LeadQueueService {
         bindVars.put('twoHoursAgo', nowValue.addHours(-2));
         bindVars.put('twoHoursFromNow', nowValue.addHours(2));
         bindVars.put('fourHoursAgo', nowValue.addHours(-4));
+        bindVars.put('twoWeeksFromNow', nowValue.addDays(14));
         bindVars.put('allowedTypes', ALLOWED_INTAKE_TYPES);
         
         List<String> conditions = new List<String>();
@@ -461,6 +541,9 @@ public with sharing class LeadQueueService {
     
     private static Boolean isRecordAssigned(String recordId) {
         try {
+            if (isSimulatedCacheActive()) {
+                return simulatedRecordAssignments.containsKey(recordId);
+            }
             Cache.OrgPartition orgCache = getCachePartition();
             if (orgCache == null) {
                 return false;
@@ -485,6 +568,18 @@ public with sharing class LeadQueueService {
     
     private static Map<String, Object> getAssignmentData(String recordId) {
         try {
+            if (isSimulatedCacheActive()) {
+                if (!simulatedRecordAssignments.containsKey(recordId)) {
+                    return null;
+                }
+                Map<String, Object> simulatedData = new Map<String, Object>{
+                    'userId' => simulatedRecordAssignments.get(recordId)
+                };
+                if (simulatedAssignmentTimestamps.containsKey(recordId)) {
+                    simulatedData.put('assignedAt', simulatedAssignmentTimestamps.get(recordId));
+                }
+                return simulatedData;
+            }
             Cache.OrgPartition orgCache = getCachePartition();
             if (orgCache == null) {
                 return null;
@@ -562,7 +657,7 @@ public with sharing class LeadQueueService {
         switch on dueDateFilter {
             when 'today' { return 'Call_at_Date__c >= TODAY AND Call_at_Date__c < TOMORROW'; }
             when 'thisWeek' { return 'Call_at_Date__c >= THIS_WEEK AND Call_at_Date__c < NEXT_WEEK'; }
-            when 'nextWeek' { return 'Call_at_Date__c = NEXT_WEEK'; }
+            when 'nextWeek' { return 'Call_at_Date__c >= NEXT_WEEK AND Call_at_Date__c < NEXT_N_WEEKS:2'; }
             when else { return null; }
         }
     }
@@ -570,7 +665,19 @@ public with sharing class LeadQueueService {
     private static void validateFieldAccess() {
         try {
             Map<String, Schema.SObjectField> fieldMap = Schema.sObjectType.litify_pm__Intake__c.fields.getMap();
-            List<String> fields = new List<String>{'litify_pm__Status__c', 'Case_Type_Reporting__c', 'Call_at_Date__c', 'litify_pm__Phone__c', 'Priority_Score__c'};
+            List<String> fields = new List<String>{
+                'litify_pm__Status__c',
+                'Case_Type_Reporting__c',
+                'Call_at_Date__c',
+                'litify_pm__Phone__c',
+                'Priority_Score__c',
+                'litify_pm__Display_Name__c',
+                'Referred_By_Name__c',
+                'litify_pm__Sign_Up_Method__c',
+                'Test_Record__c',
+                'Qualification_Status__c',
+                'Type__c'
+            };
             
             for (String field : fields) {
                 Boolean fieldExists = fieldMap.containsKey(field);

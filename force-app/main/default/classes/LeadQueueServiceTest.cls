@@ -197,7 +197,7 @@ private class LeadQueueServiceTest {
         delete [SELECT Id FROM litify_pm__Intake__c];
         
         Test.startTest();
-        LeadQueueService.AssignmentResult result = LeadQueueService.assignNextAvailableRecord(false);
+        LeadQueueService.AssignmentResult result = LeadQueueService.assignNextAvailableRecord('', '', '', false);
         Assert.isFalse(result.success, 'Assignment should fail when queue is empty');
         Assert.isTrue(result.message.contains('No available records'), 'Should indicate no records available');
         Test.stopTest();
@@ -216,7 +216,7 @@ private class LeadQueueServiceTest {
     @IsTest
     static void testAssignNextAvailableRecord() {
         Test.startTest();
-        LeadQueueService.AssignmentResult result = LeadQueueService.assignNextAvailableRecord(false);
+        LeadQueueService.AssignmentResult result = LeadQueueService.assignNextAvailableRecord('', '', '', false);
         
         // With new filtering logic requiring Call_at_Date >= NOW, records may not be available in test context
         // since Call_at_Date is a formula field that may not be populated with future dates
@@ -230,7 +230,7 @@ private class LeadQueueServiceTest {
         }
         
         // Test scheduled calls assignment
-        LeadQueueService.AssignmentResult scheduledResult = LeadQueueService.assignNextAvailableRecord(true);
+        LeadQueueService.AssignmentResult scheduledResult = LeadQueueService.assignNextAvailableRecord('', '', '', true);
         Assert.isNotNull(scheduledResult, 'Scheduled calls result should not be null');
         
         Test.stopTest();
@@ -268,6 +268,28 @@ private class LeadQueueServiceTest {
         Assert.isNotNull(assignedIds, 'Should return non-null list when cache is available');
     }
     
+    @IsTest
+    static void testAssignmentWithSimulatedCache() {
+        litify_pm__Intake__c testRecord = [SELECT Id FROM litify_pm__Intake__c LIMIT 1];
+        LeadQueueService.simulateCacheAvailability = true;
+        LeadQueueService.resetSimulatedCache();
+        try {
+            Test.startTest();
+            LeadQueueService.AssignmentResult result = LeadQueueService.assignRecord(testRecord.Id);
+            Test.stopTest();
+            
+            Assert.isTrue(result.success, 'Assignment should succeed with simulated cache: ' + result.message);
+            Assert.isTrue(LeadQueueService.isCacheConfigured(), 'Simulation should report cache as configured');
+            
+            LeadQueueService.autoReleaseRecords(new List<Id>{testRecord.Id});
+            Map<String, Long> afterRelease = LeadQueueService.getUserAssignmentData();
+            Assert.isTrue(afterRelease.isEmpty(), 'Simulated cache should release assignments when auto-released');
+        } finally {
+            LeadQueueService.simulateCacheAvailability = false;
+            LeadQueueService.resetSimulatedCache();
+        }
+    }
+    
     
     @IsTest
     static void testBusinessLogicValidation() {
@@ -303,6 +325,49 @@ private class LeadQueueServiceTest {
         Assert.isNotNull(scheduledCallsResponse, 'Scheduled calls response should not be null');
         
         Test.stopTest();
+    }
+    
+    @IsTest
+    static void testNextWeekFilterReturnsRecords() {
+        litify_pm__Intake__c futureIntake = new litify_pm__Intake__c(
+            litify_pm__Status__c = 'Lead Generated',
+            Type__c = 'Worker Compensation',
+            litify_pm__Phone__c = '555-NEXT-WEEK',
+            litify_pm__Sign_Up_Method__c = 'E-Sign',
+            Follow_Up_Date_Time__c = Datetime.newInstance(Date.today().addDays(7), Time.newInstance(9, 0, 0, 0))
+        );
+        insert futureIntake;
+        
+        Test.startTest();
+        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', 'nextWeek', false);
+        Test.stopTest();
+        
+        Assert.isTrue(response.success, 'Next week filter should return a successful response');
+    }
+    
+    @IsTest
+    static void testOtherCaseTypeIncluded() {
+        litify_pm__Intake__c otherIntake = new litify_pm__Intake__c(
+            litify_pm__Status__c = 'Lead Generated',
+            Type__c = 'Other',
+            litify_pm__Phone__c = '555-OTHER-TYPE',
+            litify_pm__Sign_Up_Method__c = 'E-Sign',
+            Follow_Up_Date_Time__c = Datetime.now().addHours(-1)
+        );
+        insert otherIntake;
+        
+        Test.startTest();
+        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', 'Other', '', false);
+        Test.stopTest();
+        
+        Boolean containsOther = false;
+        for (LeadQueueService.QueueRecord record : response.records) {
+            if (record.record.Id == otherIntake.Id) {
+                containsOther = true;
+                break;
+            }
+        }
+        Assert.isTrue(containsOther, 'Queue should include records with Other case type');
     }
     
     @IsTest
@@ -605,7 +670,7 @@ private class LeadQueueServiceTest {
         Boolean releaseResult = LeadQueueService.releaseUserAssignments();
         
         // Test next available assignment workflow
-        LeadQueueService.AssignmentResult nextResult = LeadQueueService.assignNextAvailableRecord(false);
+        LeadQueueService.AssignmentResult nextResult = LeadQueueService.assignNextAvailableRecord('', '', '', false);
         
         // Test queue data with various filter combinations
         LeadQueueService.getQueueData('Intake Scheduled', '', '', false);
@@ -789,7 +854,7 @@ private class LeadQueueServiceTest {
         LeadQueueService.QueueResponse resp3 = LeadQueueService.getQueueData('', '', 'nextWeek', false);
         
         // Test assignNextAvailableRecord
-        LeadQueueService.AssignmentResult nextAvail = LeadQueueService.assignNextAvailableRecord(false);
+        LeadQueueService.AssignmentResult nextAvail = LeadQueueService.assignNextAvailableRecord('', '', '', false);
         
         Assert.isNotNull(assignedIds, 'Assigned IDs should not be null');
         Assert.isNotNull(releaseResult, 'Release result should not be null');  

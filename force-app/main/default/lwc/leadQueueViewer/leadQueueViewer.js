@@ -8,8 +8,8 @@ import getQueueData from '@salesforce/apex/LeadQueueService.getQueueData';
 import assignRecord from '@salesforce/apex/LeadQueueService.assignRecord';
 import assignNextAvailableRecord from '@salesforce/apex/LeadQueueService.assignNextAvailableRecord';
 import releaseUserAssignments from '@salesforce/apex/LeadQueueService.releaseUserAssignments';
-import getUserAssignedRecordIds from '@salesforce/apex/LeadQueueService.getUserAssignedRecordIds';
 import getUserAssignmentData from '@salesforce/apex/LeadQueueService.getUserAssignmentData';
+import isCacheConfigured from '@salesforce/apex/LeadQueueService.isCacheConfigured';
 
 // Import utility modules
 import { SharedUtils } from './utils/sharedUtils';
@@ -65,6 +65,8 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     isReleasing = false;
     @track showScheduledCalls = false;
     @track isLoadingState = false;
+    @track isCacheReady = true;
+    hasShownCacheWarning = false;
     
     refreshInterval;
     timerInterval;
@@ -137,6 +139,36 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     
     // Resource preloading now handled by ConsoleNavigationManager
     
+    async checkCacheHealth() {
+        try {
+            const result = await isCacheConfigured();
+            this.isCacheReady = result;
+            if (!result) {
+                this.clearAssignmentsState();
+                if (!this.hasShownCacheWarning) {
+                    this.hasShownCacheWarning = true;
+                    this.showToast('Error', 'Platform Cache not configured. Please contact your administrator.', 'error');
+                }
+            } else {
+                this.hasShownCacheWarning = false;
+            }
+        } catch (error) {
+            console.error('Cache health check failed:', error);
+            this.isCacheReady = false;
+            this.clearAssignmentsState();
+            if (!this.hasShownCacheWarning) {
+                this.hasShownCacheWarning = true;
+                this.showToast('Error', 'Unable to verify Platform Cache configuration.', 'error');
+            }
+        }
+    }
+    
+    clearAssignmentsState() {
+        this.hasAssignments = false;
+        this.userAssignedRecordIds = [];
+        this.userAssignmentTimestamps = {};
+    }
+    
     connectedCallback() {
         // Initialize utility managers
         this.consoleNavigation = new ConsoleNavigationManager(this);
@@ -154,40 +186,32 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         
         // Console app warm-up optimizations
         this.consoleNavigation.warmUpConsoleApp();
-        
-        // Initial data load using pure LWC (no Aura compatibility layer)
-        this.loadQueueData();
-        this.checkUserAssignments();
+        this.checkCacheHealth()
+            .then(() => {
+                this.loadQueueData();
+                if (this.isCacheReady) {
+                    this.checkUserAssignments();
+                }
+            })
+            .catch((error) => {
+                console.error('Cache warm-up check error:', error);
+                this.loadQueueData();
+            });
         
         // Start live timer updates AFTER initial data load
         this.timerManager.startTimerUpdates();
         
         this.refreshInterval = setInterval(() => {
+            this.checkCacheHealth();
             this.handleRefresh();
-            this.checkUserAssignments();
+            if (this.isCacheReady) {
+                this.checkUserAssignments();
+            } else {
+                this.clearAssignmentsState();
+            }
         }, SharedUtils.CONSTANTS.REFRESH_INTERVAL);
     }
 
-    renderedCallback() {
-        // Intercept URL clicks for workspace navigation
-        if (this.isConsoleNavigation) {
-            const urlLinks = this.template.querySelectorAll('lightning-datatable a[href*="/lightning/r/litify_pm__Intake__c/"]');
-            urlLinks.forEach(link => {
-                if (!link.hasAttribute('data-workspace-handler')) {
-                    link.setAttribute('data-workspace-handler', 'true');
-                    link.addEventListener('click', (event) => {
-                        event.preventDefault();
-                        const href = link.getAttribute('href');
-                        const recordId = href.match(/\/lightning\/r\/litify_pm__Intake__c\/([^\/]+)\//)?.[1];
-                        if (recordId) {
-                            this.navigateToRecord(recordId);
-                        }
-                    });
-                }
-            });
-        }
-    }
-    
     disconnectedCallback() {
         // More robust cleanup to prevent memory leaks
         if (this.refreshInterval) {
@@ -253,9 +277,18 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     }
     
     async handleAssignNext() {
+        if (!this.isCacheReady) {
+            this.showToast('Error', 'Platform Cache not configured. Please contact your administrator.', 'error');
+            return;
+        }
         this.isAssigning = true;
         try {
-            const result = await assignNextAvailableRecord({ showScheduledCalls: this.showScheduledCalls });
+            const result = await assignNextAvailableRecord({
+                statusFilter: this.statusFilter,
+                caseTypeFilter: this.caseTypeFilter,
+                dueDateFilter: this.dueDateFilter,
+                showScheduledCalls: this.showScheduledCalls
+            });
             
             if (result.success) {
                 // Assignment success toast disabled per user request
@@ -298,11 +331,18 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
             case 'assign':
                 this.assignRecordToUser(originalRecordId);
                 break;
+            case 'open':
+                this.navigateToRecord(originalRecordId);
+                break;
         }
     }
     
     
     async assignRecordToUser(recordId) {
+        if (!this.isCacheReady) {
+            this.showToast('Error', 'Platform Cache not configured. Please contact your administrator.', 'error');
+            return;
+        }
         this.isAssigning = true;
         try {
             const result = await assignRecord({ recordId });
@@ -336,6 +376,10 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     }
     
     async handleReleaseAssignments() {
+        if (!this.isCacheReady) {
+            this.showToast('Error', 'Platform Cache not configured. Please contact your administrator.', 'error');
+            return;
+        }
         this.isReleasing = true;
         try {
             await releaseUserAssignments();
@@ -358,6 +402,10 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     }
     
     async checkUserAssignments() {
+        if (!this.isCacheReady) {
+            this.clearAssignmentsState();
+            return;
+        }
         try {
             const assignmentData = await getUserAssignmentData();
             const oldHasAssignments = this.hasAssignments;
@@ -497,15 +545,15 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     }
     
     get isAssignButtonDisabled() {
-        return this.isLoading || this.isAssigning || this.isReleasing;
+        return this.isLoading || this.isAssigning || this.isReleasing || !this.isCacheReady;
     }
     
     get isReleaseButtonDisabled() {
-        return this.isLoading || this.isReleasing || this.isAssigning;
+        return this.isLoading || this.isReleasing || this.isAssigning || !this.isCacheReady;
     }
     
     get areRowActionsDisabled() {
-        return this.isLoading || this.isAssigning || this.isReleasing;
+        return this.isLoading || this.isAssigning || this.isReleasing || !this.isCacheReady;
     }
     
     get assignButtonLabel() {
