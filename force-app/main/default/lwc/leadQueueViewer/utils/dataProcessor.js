@@ -166,8 +166,12 @@ export class DataProcessor {
             },
             {
                 label: 'Name',
-                fieldName: 'litify_pm__Display_Name__c',
-                type: 'text',
+                fieldName: 'recordUrl',
+                type: 'url',
+                typeAttributes: {
+                    label: { fieldName: 'litify_pm__Display_Name__c' },
+                    target: '_self'
+                },
                 cellAttributes: { class: 'link-cell' },
                 initialWidth: 300,
                 wrapText: false
