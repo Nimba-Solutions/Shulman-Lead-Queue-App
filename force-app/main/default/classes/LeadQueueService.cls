@@ -360,10 +360,10 @@ public with sharing class LeadQueueService {
         
         if (showScheduledCalls == true) {
             // Scheduled calls: show future appointments
-            String statusCondition = '(litify_pm__Status__c IN (\'Lead Generated\', \'In Contact/Under Review\', \'Missed Appointment\', \'Intake Package Sent\', \'Attempting to Contact\', \'Questionnaire\') OR (litify_pm__Status__c = \'Intake Scheduled\' AND (litify_pm__Sign_Up_Method__c = \'E-Sign\' OR litify_pm__Sign_Up_Method__c = \'Office\')))';
+            String statusCondition = '(litify_pm__Status__c IN (\'Lead Generated\', \'In Contact/Under Review\', \'Missed Appointment\', \'Intake Package Sent\', \'Attempting to Contact\', \'Questionnaire\') OR (litify_pm__Status__c = \'Intake Scheduled\' AND (litify_pm__Sign_Up_Method__c = \'E-Sign\' OR (litify_pm__Sign_Up_Method__c = \'Office\' AND Call_at_Date__c >= :twoHoursFromNow))))';
             String timeClause = allowFutureWindow
                 ? 'Call_at_Date__c >= :now AND Call_at_Date__c <= :twoWeeksFromNow'
-                : 'Call_at_Date__c >= :now AND Call_at_Date__c <= :twoHoursFromNow';
+                : 'Call_at_Date__c >= :now';
             String whereClause = baseConditions + ' AND ' + statusCondition + ' AND ' + timeClause;
             return 'SELECT ' + REQUIRED_FIELDS + ' FROM litify_pm__Intake__c WHERE ' + whereClause;
         } else {
@@ -392,7 +392,7 @@ public with sharing class LeadQueueService {
                 '(litify_pm__Status__c = \'Intake Scheduled\' AND (' +
                     '(litify_pm__Sign_Up_Method__c = \'E-Sign\' AND Call_at_Date__c <= :now)' +
                     ' OR ' +
-                    '(litify_pm__Sign_Up_Method__c = \'Office\' AND Call_at_Date__c >= :twoHoursAgo AND Call_at_Date__c <= :twoHoursFromNow)' +
+                    '(litify_pm__Sign_Up_Method__c = \'Office\' AND Call_at_Date__c <= :now)' +
                 '))' +
                 ')';
             
