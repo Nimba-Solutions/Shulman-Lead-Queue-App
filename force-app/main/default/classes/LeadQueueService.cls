@@ -17,14 +17,25 @@ public with sharing class LeadQueueService {
         'WC & PI' => 4,
         'Personal Injury' => 5,
         'Worker Compensation' => 6,
-        'Other' => 7
+        'Other' => 7,
+        'Medical Malpractice' => 9,
+        'Employment Law' => 10,
+        'Federal Workers\' Compensation' => 11,
+        'Immigration' => 12,
+        'Mass Tort/Product Liability' => 13,
+        'Real Estate/Closings' => 14,
+        'Landlord-Tenant' => 15,
+        'Family Law' => 16,
+        'Estate Planning' => 17,
+        'Business/Corporate' => 18,
+        'Criminal Defense' => 19,
+        'Traffic' => 20,
+        'Veteran Disability' => 21
     };
     
-    private static final Set<String> ALLOWED_INTAKE_TYPES = new Set<String>{
-        'Worker Compensation',
-        'Personal Injury',
-        'WC & PI',
-        'Other'
+    private static final Set<String> EXCLUDED_INTAKE_TYPES = new Set<String>{
+        'SSD',
+        'Civil Rights'
     };
     
     private static final Integer ASSIGNMENT_TTL = 1800; // 30 minutes
@@ -165,9 +176,9 @@ public with sharing class LeadQueueService {
             }
             
             List<litify_pm__Intake__c> records = [
-                SELECT Id FROM litify_pm__Intake__c 
-                WHERE Id = :recordId 
-                AND Type__c IN :ALLOWED_INTAKE_TYPES
+                SELECT Id FROM litify_pm__Intake__c
+                WHERE Id = :recordId
+                AND (Type__c NOT IN :EXCLUDED_INTAKE_TYPES OR Type__c = null)
                 LIMIT 1
             ];
             
@@ -356,7 +367,7 @@ public with sharing class LeadQueueService {
     }
     
     private static String buildBaseQuery(Boolean showScheduledCalls, Boolean allowFutureWindow) {
-        String baseConditions = '(Test_Record__c = false OR Test_Record__c = null) AND Type__c IN :allowedTypes';
+        String baseConditions = '(Test_Record__c = false OR Test_Record__c = null) AND (Type__c NOT IN :excludedTypes OR Type__c = null)';
         
         if (showScheduledCalls == true) {
             // Scheduled calls: show future appointments
@@ -413,7 +424,7 @@ public with sharing class LeadQueueService {
         bindVars.put('twoHoursFromNow', nowValue.addHours(2));
         bindVars.put('fourHoursAgo', nowValue.addHours(-4));
         bindVars.put('twoWeeksFromNow', nowValue.addDays(14));
-        bindVars.put('allowedTypes', ALLOWED_INTAKE_TYPES);
+        bindVars.put('excludedTypes', EXCLUDED_INTAKE_TYPES);
         
         List<String> conditions = new List<String>();
         
@@ -493,11 +504,11 @@ public with sharing class LeadQueueService {
     }
     
     private static Boolean isValidQueueRecord(litify_pm__Intake__c record) {
-        return record.Call_at_Date__c != null 
-            && String.isNotBlank(record.Case_Type_Reporting__c)
+        return record.Call_at_Date__c != null
             && String.isNotBlank(record.litify_pm__Status__c)
-            && CASE_TYPE_PRIORITY.containsKey(record.Case_Type_Reporting__c)
-            && STATUS_PRIORITY.containsKey(record.litify_pm__Status__c);
+            && STATUS_PRIORITY.containsKey(record.litify_pm__Status__c)
+            && (String.isBlank(record.Case_Type_Reporting__c)
+                || CASE_TYPE_PRIORITY.containsKey(record.Case_Type_Reporting__c));
     }
     
     private static QueueRecord createQueueRecord(litify_pm__Intake__c record, Map<Id, String> userIdToNameMap) {
