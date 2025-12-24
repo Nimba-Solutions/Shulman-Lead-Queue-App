@@ -2,7 +2,7 @@
  * Data processing utilities for Lead Queue
  * Handles queue data processing, filtering, and state management
  */
-import { SharedUtils } from './sharedUtils';
+import { SharedUtils } from 'c/sharedUtils';
 
 export class DataProcessor {
     
@@ -22,10 +22,11 @@ export class DataProcessor {
         }
         
         // Safe assignment with fallbacks - store original stats and keep them fixed
-        this.component.originalStats = data.stats || { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0 };
+        this.component.originalStats = data.stats || { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0, referralCount: 0 };
         // queueStats should always show original values, never update with filters
         this.component.queueStats = { ...this.component.originalStats };
         this.component.filterOptions = data.filters || { statusOptions: [], caseTypeOptions: [] };
+        this.component.tileStatusGroups = data.tileStatusGroups || {};
         
         // Validate records array
         if (!Array.isArray(data.records)) {
@@ -72,35 +73,27 @@ export class DataProcessor {
     resetToEmptyState() {
         this.component.records = [];
         this.component.originalRecords = [];
-        this.component.originalStats = { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0 };
-        this.component.queueStats = { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0 };
+        this.component.originalStats = { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0, referralCount: 0 };
+        this.component.queueStats = { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0, referralCount: 0 };
         this.component.filterOptions = { statusOptions: [], caseTypeOptions: [] };
+        this.component.tileStatusGroups = {};
     }
 
     /**
      * Apply client-side filtering based on active tile filter
      */
     applyClientSideFilter() {
-        if (this.component.activeTileFilter === 'highPriority') {
-            this.component.records = this.component.originalRecords.filter(record => 
-                record.Status === 'Intake Scheduled' || record.Status === 'Lead Generated'
-            );
-        } else if (this.component.activeTileFilter === 'inContact') {
-            this.component.records = this.component.originalRecords.filter(record => 
-                record.Status === 'In Contact/Under Review' || record.Status === 'Questionnaire' || record.Status === 'Missed Appointment'
-            );
-        } else if (this.component.activeTileFilter === 'noContact') {
-            this.component.records = this.component.originalRecords.filter(record => 
-                record.Status === 'Attempting to Contact'
-            );
-        } else if (this.component.activeTileFilter === 'retainerSent') {
-            this.component.records = this.component.originalRecords.filter(record => 
-                record.Status === 'Intake Package Sent'
-            );
-        } else {
-            // No filter active, show all original records
-            this.component.records = [...this.component.originalRecords];
+        if (this.component.activeTileFilter) {
+            const groups = this.component.tileStatusGroups || {};
+            const statuses = groups[this.component.activeTileFilter];
+            if (Array.isArray(statuses) && statuses.length > 0) {
+                this.component.records = this.component.originalRecords.filter(record => statuses.includes(record.Status));
+                return;
+            }
         }
+        
+        // No filter active or groups missing, show all original records
+        this.component.records = [...this.component.originalRecords];
     }
 
     /**

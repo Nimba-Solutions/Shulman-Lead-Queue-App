@@ -1,36 +1,54 @@
 public with sharing class LeadQueueService {
     
-    private static final Map<String, Integer> STATUS_PRIORITY = new Map<String, Integer>{
-        'Lead Generated' => 1,
-        'Intake Scheduled' => 2,
-        'In Contact/Under Review' => 3,
-        'Missed Appointment' => 4,
-        'Intake Package Sent' => 5,
-        'Attempting to Contact' => 6,
-        'Questionnaire' => 7
+    private static final List<String> STATUS_ORDER = new List<String>{
+        'Lead Generated',
+        'Intake Scheduled',
+        'In Contact/Under Review',
+        'Missed Appointment',
+        'Intake Package Sent',
+        'Attempting to Contact',
+        'Questionnaire',
+        'Pending Referral'
     };
     
-    private static final Map<String, Integer> CASE_TYPE_PRIORITY = new Map<String, Integer>{
-        'Labor Law' => 1,
-        'MVA' => 2,
-        'Premises' => 3,
-        'WC & PI' => 4,
-        'Personal Injury' => 5,
-        'Worker Compensation' => 6,
-        'Other' => 7,
-        'Medical Malpractice' => 9,
-        'Employment Law' => 10,
-        'Federal Workers\' Compensation' => 11,
-        'Immigration' => 12,
-        'Mass Tort/Product Liability' => 13,
-        'Real Estate/Closings' => 14,
-        'Landlord-Tenant' => 15,
-        'Family Law' => 16,
-        'Estate Planning' => 17,
-        'Business/Corporate' => 18,
-        'Criminal Defense' => 19,
-        'Traffic' => 20,
-        'Veteran Disability' => 21
+    private static final Set<String> ALL_QUEUE_STATUSES = new Set<String>{
+        'Lead Generated',
+        'Intake Scheduled',
+        'In Contact/Under Review',
+        'Missed Appointment',
+        'Intake Package Sent',
+        'Attempting to Contact',
+        'Questionnaire',
+        'Pending Referral'
+    };
+    
+    private static final Set<String> READY_TO_CALL_STATUSES = new Set<String>{
+        'Lead Generated',
+        'Intake Scheduled',
+        'In Contact/Under Review',
+        'Missed Appointment',
+        'Intake Package Sent',
+        'Attempting to Contact',
+        'Questionnaire',
+        'Pending Referral'
+    };
+    
+    private static final Set<String> SCHEDULED_CALL_STATUSES = new Set<String>{
+        'Lead Generated',
+        'Intake Scheduled',
+        'In Contact/Under Review',
+        'Missed Appointment',
+        'Intake Package Sent',
+        'Attempting to Contact',
+        'Questionnaire'
+    };
+    
+    private static final Map<String, Set<String>> TILE_STATUS_GROUPS = new Map<String, Set<String>>{
+        'highPriority' => new Set<String>{'Intake Scheduled', 'Lead Generated'},
+        'inContact' => new Set<String>{'In Contact/Under Review', 'Questionnaire', 'Missed Appointment'},
+        'noContact' => new Set<String>{'Attempting to Contact'},
+        'retainerSent' => new Set<String>{'Intake Package Sent'},
+        'referrals' => new Set<String>{'Pending Referral'}
     };
     
     private static final Set<String> EXCLUDED_INTAKE_TYPES = new Set<String>{
@@ -42,7 +60,8 @@ public with sharing class LeadQueueService {
     private static final String CACHE_PARTITION = 'local.LeadQueueCache';
     private static final Integer HIGH_PRIORITY_THRESHOLD = 22;
     private static final Integer MEDIUM_PRIORITY_THRESHOLD = 55;
-    private static final String BASE_ORDER_BY = 'ORDER BY Priority_Score__c ASC, Call_at_Date__c ASC';
+    private static final String READY_TO_CALL_ORDER_BY = 'ORDER BY Priority_Score__c ASC, Call_at_Date__c ASC';
+    private static final String SCHEDULED_CALL_ORDER_BY = 'ORDER BY Call_at_Date__c ASC';
     private static final String REQUIRED_FIELDS = 'Id, Name, litify_pm__Display_Name__c, Referred_By_Name__c, litify_pm__Status__c, Priority_Score__c, CreatedDate, Case_Type_Reporting__c, Type__c, Call_at_Date__c, litify_pm__Phone__c, litify_pm__Sign_Up_Method__c, Test_Record__c, Qualification_Status__c';
     private static final Set<String> REQUIRED_FIELD_SET = buildRequiredFieldSet();
     private static final String ASSIGNMENT_CACHE_PREFIX = 'assign';
@@ -104,7 +123,7 @@ public with sharing class LeadQueueService {
             }
             
             // Input validation with descriptive errors
-            ValidationResult validation = validateFilterInputs(statusFilter, caseTypeFilter, dueDateFilter);
+            ValidationResult validation = validateFilterInputs(statusFilter, caseTypeFilter, dueDateFilter, showScheduledCalls);
             if (!validation.isValid) {
                 return new QueueResponse(validation.errorMessage);
             }
@@ -114,7 +133,7 @@ public with sharing class LeadQueueService {
             List<QueueRecord> queueRecords = processRecords(records, showScheduledCalls);
             QueueStats stats = calculateStats(queueRecords);
             
-            return new QueueResponse(queueRecords, stats, getFilterOptions());
+            return new QueueResponse(queueRecords, stats, getFilterOptions(showScheduledCalls), buildTileStatusGroups());
             
         } catch (Exception e) {
             // Fallback error handling for unexpected issues
@@ -371,7 +390,9 @@ public with sharing class LeadQueueService {
         
         if (showScheduledCalls == true) {
             // Scheduled calls: show future appointments
-            String statusCondition = '(litify_pm__Status__c IN (\'Lead Generated\', \'In Contact/Under Review\', \'Missed Appointment\', \'Intake Package Sent\', \'Attempting to Contact\', \'Questionnaire\') OR (litify_pm__Status__c = \'Intake Scheduled\' AND (litify_pm__Sign_Up_Method__c = \'E-Sign\' OR (litify_pm__Sign_Up_Method__c = \'Office\' AND Call_at_Date__c >= :twoHoursFromNow))))';
+            String scheduledStandardStatuses = buildStatusInClause(getScheduledCallStandardStatuses());
+            String statusCondition = '(litify_pm__Status__c IN ' + scheduledStandardStatuses +
+                ' OR (litify_pm__Status__c = \'Intake Scheduled\' AND (litify_pm__Sign_Up_Method__c = \'E-Sign\' OR (litify_pm__Sign_Up_Method__c = \'Office\' AND Call_at_Date__c >= :twoHoursFromNow))))';
             String timeClause = allowFutureWindow
                 ? 'Call_at_Date__c >= :now AND Call_at_Date__c <= :twoWeeksFromNow'
                 : 'Call_at_Date__c >= :now';
@@ -379,8 +400,9 @@ public with sharing class LeadQueueService {
             return 'SELECT ' + REQUIRED_FIELDS + ' FROM litify_pm__Intake__c WHERE ' + whereClause;
         } else {
             if (allowFutureWindow) {
+                String readyStandardStatuses = buildStatusInClause(getReadyToCallStandardStatuses());
                 String futureCondition = '(' +
-                    '(litify_pm__Status__c IN (\'Lead Generated\', \'In Contact/Under Review\', \'Missed Appointment\', \'Intake Package Sent\', \'Attempting to Contact\'))' +
+                    '(litify_pm__Status__c IN ' + readyStandardStatuses + ')' +
                     ' OR ' +
                     '(litify_pm__Status__c = \'Questionnaire\')' +
                     ' OR ' +
@@ -392,9 +414,10 @@ public with sharing class LeadQueueService {
             }
             
             // Ready to call: different time criteria per status
+            String readyStandardStatuses = buildStatusInClause(getReadyToCallStandardStatuses());
             String complexCondition = '(' +
                 // Standard statuses: show if Call_at_Date__c <= now
-                '(litify_pm__Status__c IN (\'Lead Generated\', \'In Contact/Under Review\', \'Missed Appointment\', \'Intake Package Sent\', \'Attempting to Contact\') AND Call_at_Date__c <= :now)' +
+                '(litify_pm__Status__c IN ' + readyStandardStatuses + ' AND Call_at_Date__c <= :now)' +
                 ' OR ' +
                 // Questionnaire: show only if Call_at_Date__c <= 4 hours ago (exclude recent)
                 '(litify_pm__Status__c = \'Questionnaire\' AND Call_at_Date__c <= :fourHoursAgo)' +
@@ -410,6 +433,43 @@ public with sharing class LeadQueueService {
             String whereClause = baseConditions + ' AND ' + complexCondition;
             return 'SELECT ' + REQUIRED_FIELDS + ' FROM litify_pm__Intake__c WHERE ' + whereClause;
         }
+    }
+
+    private static String buildStatusInClause(List<String> statuses) {
+        if (statuses == null || statuses.isEmpty()) {
+            return '(\'\')';
+        }
+        List<String> quoted = new List<String>();
+        for (String status : statuses) {
+            quoted.add('\'' + String.escapeSingleQuotes(status) + '\'');
+        }
+        return '(' + String.join(quoted, ', ') + ')';
+    }
+
+    private static List<String> getReadyToCallStandardStatuses() {
+        return getStatusesMinus(READY_TO_CALL_STATUSES, new Set<String>{'Questionnaire', 'Intake Scheduled'});
+    }
+
+    private static List<String> getScheduledCallStandardStatuses() {
+        return getStatusesMinus(SCHEDULED_CALL_STATUSES, new Set<String>{'Intake Scheduled'});
+    }
+
+    private static List<String> getStatusesMinus(Set<String> source, Set<String> exclude) {
+        List<String> result = new List<String>();
+        for (String status : STATUS_ORDER) {
+            if (source.contains(status) && !exclude.contains(status)) {
+                result.add(status);
+            }
+        }
+        return result;
+    }
+
+    private static Set<String> getStatusesForView(Boolean showScheduledCalls) {
+        return showScheduledCalls ? SCHEDULED_CALL_STATUSES : READY_TO_CALL_STATUSES;
+    }
+
+    private static Set<String> getAllQueueStatuses() {
+        return ALL_QUEUE_STATUSES;
     }
     
     private static List<litify_pm__Intake__c> getAvailableRecords(Integer limitCount, String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls) {
@@ -449,7 +509,7 @@ public with sharing class LeadQueueService {
             query += ' AND ' + String.join(conditions, ' AND ');
         }
         
-        query += ' ' + BASE_ORDER_BY;
+        query += ' ' + (showScheduledCalls ? SCHEDULED_CALL_ORDER_BY : READY_TO_CALL_ORDER_BY);
         if (limitCount != null) {
             query += ' LIMIT ' + limitCount;
         }
@@ -495,20 +555,15 @@ public with sharing class LeadQueueService {
                 queueRecords.add(createQueueRecord(record, userIdToNameMap));
             }
         }
-        if (showScheduledCalls == true) {
-            queueRecords.sort(new DateComparator());
-        } else {
-            queueRecords.sort(new PriorityComparator());
-        }
         return queueRecords;
     }
     
     private static Boolean isValidQueueRecord(litify_pm__Intake__c record) {
         return record.Call_at_Date__c != null
             && String.isNotBlank(record.litify_pm__Status__c)
-            && STATUS_PRIORITY.containsKey(record.litify_pm__Status__c)
+            && getAllQueueStatuses().contains(record.litify_pm__Status__c)
             && (String.isBlank(record.Case_Type_Reporting__c)
-                || CASE_TYPE_PRIORITY.containsKey(record.Case_Type_Reporting__c));
+                || LeadQueueConfig.CASE_TYPE_PRIORITY.containsKey(record.Case_Type_Reporting__c));
     }
     
     private static QueueRecord createQueueRecord(litify_pm__Intake__c record, Map<Id, String> userIdToNameMap) {
@@ -533,45 +588,70 @@ public with sharing class LeadQueueService {
             String status = record.record.litify_pm__Status__c;
             
             // High Priority: Intake Scheduled OR Lead Generated
-            if (status == 'Intake Scheduled' || status == 'Lead Generated') {
+            if (isStatusInGroup('highPriority', status)) {
                 stats.highPriorityCount++;
             }
             
             // In Contact: In Contact/Under Review OR Questionnaire OR Missed Appointment
-            if (status == 'In Contact/Under Review' || status == 'Questionnaire' || status == 'Missed Appointment') {
+            if (isStatusInGroup('inContact', status)) {
                 stats.inContactCount++;
             }
             
             // No Contact: Attempting to Contact
-            if (status == 'Attempting to Contact') {
+            if (isStatusInGroup('noContact', status)) {
                 stats.noContactCount++;
             }
             
             // Retainer Sent: Intake Package Sent
-            if (status == 'Intake Package Sent') {
+            if (isStatusInGroup('retainerSent', status)) {
                 stats.retainerSentCount++;
+            }
+            
+            if (isStatusInGroup('referrals', status)) {
+                stats.referralCount++;
             }
         }
         
         return stats;
     }
+
+    private static Boolean isStatusInGroup(String groupKey, String status) {
+        Set<String> statusGroup = TILE_STATUS_GROUPS.get(groupKey);
+        return statusGroup != null && statusGroup.contains(status);
+    }
     
-    private static FilterOptions getFilterOptions() {
+    private static FilterOptions getFilterOptions(Boolean showScheduledCalls) {
         FilterOptions options = new FilterOptions();
         
-        options.statusOptions = new List<PicklistOption>();
-        options.statusOptions.add(new PicklistOption('All Statuses', ''));
-        for (String status : STATUS_PRIORITY.keySet()) {
-            options.statusOptions.add(new PicklistOption(status, status));
-        }
+        options.statusOptions = buildStatusOptions(showScheduledCalls);
         
         options.caseTypeOptions = new List<PicklistOption>();
         options.caseTypeOptions.add(new PicklistOption('All Case Types', ''));
-        for (String caseType : CASE_TYPE_PRIORITY.keySet()) {
+        for (String caseType : LeadQueueConfig.CASE_TYPE_PRIORITY.keySet()) {
             options.caseTypeOptions.add(new PicklistOption(caseType, caseType));
         }
         
         return options;
+    }
+
+    private static List<PicklistOption> buildStatusOptions(Boolean showScheduledCalls) {
+        List<PicklistOption> options = new List<PicklistOption>();
+        options.add(new PicklistOption('All Statuses', ''));
+        Set<String> allowedStatuses = getStatusesForView(showScheduledCalls);
+        for (String status : STATUS_ORDER) {
+            if (allowedStatuses.contains(status)) {
+                options.add(new PicklistOption(status, status));
+            }
+        }
+        return options;
+    }
+
+    private static Map<String, List<String>> buildTileStatusGroups() {
+        Map<String, List<String>> result = new Map<String, List<String>>();
+        for (String key : TILE_STATUS_GROUPS.keySet()) {
+            result.put(key, new List<String>(TILE_STATUS_GROUPS.get(key)));
+        }
+        return result;
     }
     
     
@@ -721,45 +801,21 @@ public with sharing class LeadQueueService {
         return callDateTime != null && callDateTime.date() < TODAY;
     }
     
-    public class PriorityComparator implements Comparator<QueueRecord> {
-        public Integer compare(QueueRecord a, QueueRecord b) {
-            if (a.priorityScore != b.priorityScore) {
-                return a.priorityScore - b.priorityScore;
-            }
-            
-            if (a.record.Call_at_Date__c == null && b.record.Call_at_Date__c == null) return 0;
-            if (a.record.Call_at_Date__c == null) return 1;
-            if (b.record.Call_at_Date__c == null) return -1;
-            
-            return a.record.Call_at_Date__c < b.record.Call_at_Date__c ? -1 : 
-                   a.record.Call_at_Date__c > b.record.Call_at_Date__c ? 1 : 0;
-        }
-    }
-    
-    public class DateComparator implements Comparator<QueueRecord> {
-        public Integer compare(QueueRecord a, QueueRecord b) {
-            if (a.record.Call_at_Date__c == null && b.record.Call_at_Date__c == null) return 0;
-            if (a.record.Call_at_Date__c == null) return 1;
-            if (b.record.Call_at_Date__c == null) return -1;
-            
-            return a.record.Call_at_Date__c < b.record.Call_at_Date__c ? -1 : 
-                   a.record.Call_at_Date__c > b.record.Call_at_Date__c ? 1 : 0;
-        }
-    }
-    
     public class QueueResponse {
         @AuraEnabled public Boolean success { get; set; }
         @AuraEnabled public String errorMessage { get; set; }
         @AuraEnabled public List<QueueRecord> records { get; set; }
         @AuraEnabled public QueueStats stats { get; set; }
         @AuraEnabled public FilterOptions filters { get; set; }
+        @AuraEnabled public Map<String, List<String>> tileStatusGroups { get; set; }
         
         // Success constructor
-        public QueueResponse(List<QueueRecord> records, QueueStats stats, FilterOptions filters) {
+        public QueueResponse(List<QueueRecord> records, QueueStats stats, FilterOptions filters, Map<String, List<String>> tileStatusGroups) {
             this.success = true;
             this.records = records;
             this.stats = stats;
             this.filters = filters;
+            this.tileStatusGroups = tileStatusGroups;
         }
         
         // Error constructor
@@ -769,6 +825,7 @@ public with sharing class LeadQueueService {
             this.records = new List<QueueRecord>();
             this.stats = new QueueStats();
             this.filters = new FilterOptions();
+            this.tileStatusGroups = new Map<String, List<String>>();
         }
     }
     
@@ -789,6 +846,7 @@ public with sharing class LeadQueueService {
         @AuraEnabled public Integer inContactCount { get; set; }
         @AuraEnabled public Integer noContactCount { get; set; }
         @AuraEnabled public Integer retainerSentCount { get; set; }
+        @AuraEnabled public Integer referralCount { get; set; }
         
         public QueueStats() {
             this.totalRecords = 0;
@@ -796,6 +854,7 @@ public with sharing class LeadQueueService {
             this.inContactCount = 0;
             this.noContactCount = 0;
             this.retainerSentCount = 0;
+            this.referralCount = 0;
         }
     }
     
@@ -836,17 +895,29 @@ public with sharing class LeadQueueService {
         }
     }
     
-    private static ValidationResult validateFilterInputs(String statusFilter, String caseTypeFilter, String dueDateFilter) {
-        if (String.isNotBlank(statusFilter) && !STATUS_PRIORITY.containsKey(statusFilter)) {
-            return new ValidationResult(false, 'Invalid status filter: ' + statusFilter + '. Valid options: ' + String.join(STATUS_PRIORITY.keySet(), ', '));
+    private static ValidationResult validateFilterInputs(String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls) {
+        if (String.isNotBlank(statusFilter) && !getStatusesForView(showScheduledCalls).contains(statusFilter)) {
+            List<String> validStatuses = getStatusListForMessage(showScheduledCalls);
+            return new ValidationResult(false, 'Invalid status filter: ' + statusFilter + '. Valid options: ' + String.join(validStatuses, ', '));
         }
-        if (String.isNotBlank(caseTypeFilter) && !CASE_TYPE_PRIORITY.containsKey(caseTypeFilter)) {
-            return new ValidationResult(false, 'Invalid case type filter: ' + caseTypeFilter + '. Valid options: ' + String.join(CASE_TYPE_PRIORITY.keySet(), ', '));
+        if (String.isNotBlank(caseTypeFilter) && !LeadQueueConfig.CASE_TYPE_PRIORITY.containsKey(caseTypeFilter)) {
+            return new ValidationResult(false, 'Invalid case type filter: ' + caseTypeFilter + '. Valid options: ' + String.join(LeadQueueConfig.CASE_TYPE_PRIORITY.keySet(), ', '));
         }
         if (String.isNotBlank(dueDateFilter) && !isValidDateFilter(dueDateFilter)) {
             return new ValidationResult(false, 'Invalid date filter: ' + dueDateFilter + '. Valid options: today, thisWeek, nextWeek');
         }
         return new ValidationResult(true, null);
+    }
+
+    private static List<String> getStatusListForMessage(Boolean showScheduledCalls) {
+        List<String> result = new List<String>();
+        Set<String> allowedStatuses = getStatusesForView(showScheduledCalls);
+        for (String status : STATUS_ORDER) {
+            if (allowedStatuses.contains(status)) {
+                result.add(status);
+            }
+        }
+        return result;
     }
     
     private static Boolean isValidDateFilter(String dateFilter) {
@@ -857,7 +928,7 @@ public with sharing class LeadQueueService {
         String exceptionType = e.getTypeName();
         if (exceptionType.contains('QueryException')) {
             return 'Database query error. Please contact your administrator.';
-        } else if (exceptionType.contains('SecurityException') || e.getMessage().contains('permission')) {
+        } else if (exceptionType.contains('SecurityException') || (e.getMessage() != null && e.getMessage().contains('permission'))) {
             return 'Insufficient permissions to access intake records';
         } else {
             return 'Error loading queue data. Please contact your administrator if this persists.';

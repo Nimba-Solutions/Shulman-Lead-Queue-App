@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+    <types>
+        <members>CaseTypePriorityBackfill</members>
+        <members>CustomIntakeTriggerHandler</members>
+        <members>LeadQueueConfig</members>
+        <members>LeadQueueService</members>
+        <members>LeadQueueServiceTest</members>
+        <name>ApexClass</name>
+    </types>
+    <types>
+        <members>claimRecordButton</members>
+        <members>leadQueueViewer</members>
+        <members>sharedUtils</members>
+        <name>LightningComponentBundle</name>
+    </types>
+    <types>
+        <members>litify_pm__Intake__c.Case_Type_Priority__c</members>
+        <members>litify_pm__Intake__c.Priority_Score__c</members>
+        <name>CustomField</name>
+    </types>
+    <types>
+        <members>LeadQueue_Access</members>
+        <name>PermissionSet</name>
+    </types>
+    <version>61.0</version>
+</Package>

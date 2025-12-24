@@ -2,6 +2,7 @@
  * Timer management utilities for Lead Queue
  * Handles assignment timers, real-time updates, and timestamp processing
  */
+import { SharedUtils } from 'c/sharedUtils';
 
 export class TimerManager {
     
@@ -195,9 +196,7 @@ export class TimerManager {
                 }
                 
                 // Try with -assigned suffix removed (fallback)
-                const originalRecordId = record.Id.endsWith('-assigned') 
-                    ? record.Id.slice(0, -9) 
-                    : record.Id;
+                const originalRecordId = SharedUtils.normalizeRecordId(record.Id);
                 
                 return this.component.userAssignedRecordIds.includes(originalRecordId);
             });
@@ -224,9 +223,7 @@ export class TimerManager {
                 }
                 
                 // Try with -assigned suffix removed (fallback)
-                const originalRecordId = record.Id.endsWith('-assigned') 
-                    ? record.Id.slice(0, -9) 
-                    : record.Id;
+                const originalRecordId = SharedUtils.normalizeRecordId(record.Id);
                 
                 return this.component.userAssignedRecordIds.includes(originalRecordId);
             });
@@ -253,9 +250,7 @@ export class TimerManager {
                 }
                 
                 // Try with -assigned suffix removed (fallback)
-                const originalRecordId = record.Id.endsWith('-assigned') 
-                    ? record.Id.slice(0, -9) 
-                    : record.Id;
+                const originalRecordId = SharedUtils.normalizeRecordId(record.Id);
                 
                 return this.component.userAssignedRecordIds.includes(originalRecordId);
             });

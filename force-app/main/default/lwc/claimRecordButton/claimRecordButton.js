@@ -1,8 +1,9 @@
-import { LightningElement, api, wire } from 'lwc';
+import { LightningElement, api } from 'lwc';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import assignRecord from '@salesforce/apex/LeadQueueService.assignRecord';
 import releaseUserAssignments from '@salesforce/apex/LeadQueueService.releaseUserAssignments';
 import getUserAssignedRecordIds from '@salesforce/apex/LeadQueueService.getUserAssignedRecordIds';
+import { SharedUtils } from 'c/sharedUtils';
 
 export default class ClaimRecordButton extends LightningElement {
     @api recordId;
@@ -87,7 +88,7 @@ export default class ClaimRecordButton extends LightningElement {
                 this.showToast('Warning', result.message, 'warning');
             }
         } catch (error) {
-            this.showToast('Error', 'Failed to claim record: ' + this.getErrorMessage(error), 'error');
+            this.showToast('Error', 'Failed to claim record: ' + SharedUtils.getErrorMessage(error), 'error');
         } finally {
             this.isAssigning = false;
         }
@@ -106,7 +107,7 @@ export default class ClaimRecordButton extends LightningElement {
                 this.showSuccess = false;
             }, 3000);
         } catch (error) {
-            this.showToast('Error', 'Failed to release record: ' + this.getErrorMessage(error), 'error');
+            this.showToast('Error', 'Failed to release record: ' + SharedUtils.getErrorMessage(error), 'error');
         } finally {
             this.isReleasing = false;
         }
@@ -131,16 +132,4 @@ export default class ClaimRecordButton extends LightningElement {
         this.dispatchEvent(new ShowToastEvent({ title, message, variant }));
     }
 
-    getErrorMessage(error) {
-        const userFriendlyMessages = {
-            'FIELD_CUSTOM_VALIDATION_EXCEPTION': 'Invalid data provided',
-            'INSUFFICIENT_ACCESS_OR_READONLY': 'Access denied',
-            'QUERY_TIMEOUT': 'Request timed out, please try again',
-            'REQUIRED_FIELD_MISSING': 'Required information is missing',
-            'FIELD_INTEGRITY_EXCEPTION': 'Data validation error'
-        };
-        
-        const errorCode = error?.body?.exceptionType || error?.name;
-        return userFriendlyMessages[errorCode] || 'An error occurred. Please contact your administrator.';
-    }
 }

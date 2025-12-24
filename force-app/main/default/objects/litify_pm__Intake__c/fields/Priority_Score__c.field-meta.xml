@@ -10,16 +10,8 @@
          &apos;Intake Package Sent&apos;, 5,
          &apos;Attempting to Contact&apos;, 6,
          &apos;Questionnaire&apos;, 7,
-         99) * 10) + 
-       CASE(Case_Type_Reporting__c,
-         &apos;Labor Law&apos;, 1,
-         &apos;MVA&apos;, 2,
-         &apos;Premises&apos;, 3,
-         &apos;WC &amp; PI&apos;, 4,
-         &apos;Personal Injury&apos;, 5,
-         &apos;Worker Compensation&apos;, 6,
-         &apos;Other&apos;, 7,
-         8)</formula>
+         &apos;Pending Referral&apos;, 8,
+         99) * 10) + Case_Type_Priority__c</formula>
     <formulaTreatBlanksAs>BlankAsZero</formulaTreatBlanksAs>
     <label>Priority Score</label>
     <precision>18</precision>

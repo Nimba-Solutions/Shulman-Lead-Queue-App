@@ -128,6 +128,97 @@ private class LeadQueueServiceTest {
         Assert.isNotNull(response.stats, 'Stats should not be null');
         Assert.isNotNull(response.filters, 'Filters should not be null');
     }
+
+    @IsTest
+    static void testStatusOptionsOrderAndGroups() {
+        Test.startTest();
+        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
+        Test.stopTest();
+        
+        Assert.isTrue(response.success, 'Response should be successful');
+        Assert.isNotNull(response.filters, 'Filters should not be null');
+        Assert.isNotNull(response.filters.statusOptions, 'Status options should not be null');
+        
+        List<String> expectedOrder = new List<String>{
+            '',
+            'Lead Generated',
+            'Intake Scheduled',
+            'In Contact/Under Review',
+            'Missed Appointment',
+            'Intake Package Sent',
+            'Attempting to Contact',
+            'Questionnaire',
+            'Pending Referral'
+        };
+        
+        List<String> actualValues = new List<String>();
+        for (LeadQueueService.PicklistOption option : response.filters.statusOptions) {
+            actualValues.add(option.value);
+        }
+        
+        Assert.areEqual(expectedOrder.size(), actualValues.size(),
+            'Status options should match expected size and order');
+        for (Integer idx = 0; idx < expectedOrder.size(); idx++) {
+            Assert.areEqual(expectedOrder[idx], actualValues[idx],
+                'Status option order mismatch at index ' + idx);
+        }
+        
+        Assert.isNotNull(response.tileStatusGroups, 'Tile status groups should be provided');
+        Assert.isTrue(response.tileStatusGroups.containsKey('highPriority'), 'Tile groups should include highPriority');
+        Assert.isTrue(response.tileStatusGroups.containsKey('inContact'), 'Tile groups should include inContact');
+        Assert.isTrue(response.tileStatusGroups.containsKey('noContact'), 'Tile groups should include noContact');
+        Assert.isTrue(response.tileStatusGroups.containsKey('retainerSent'), 'Tile groups should include retainerSent');
+        Assert.isTrue(response.tileStatusGroups.containsKey('referrals'), 'Tile groups should include referrals');
+    }
+
+    @IsTest
+    static void testScheduledCallStatusOptionsExcludePendingReferral() {
+        Test.startTest();
+        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', '', true);
+        Test.stopTest();
+        
+        Assert.isTrue(response.success, 'Scheduled calls response should be successful');
+        List<String> statusValues = new List<String>();
+        for (LeadQueueService.PicklistOption option : response.filters.statusOptions) {
+            statusValues.add(option.value);
+        }
+        Assert.isFalse(statusValues.contains('Pending Referral'), 'Scheduled calls should not include Pending Referral status option');
+    }
+
+    @IsTest
+    static void testReferralCountInStats() {
+        if (!isStatusPicklistValueAvailable('Pending Referral')) {
+            Assert.isTrue(true, 'Pending Referral status not configured in org');
+            return;
+        }
+        litify_pm__Intake__c referralIntake = new litify_pm__Intake__c(
+            litify_pm__Status__c = 'Pending Referral',
+            Type__c = 'Personal Injury',
+            Case_Type__c = 'MVA',
+            litify_pm__Phone__c = '555-REFERRAL-COUNT',
+            litify_pm__Sign_Up_Method__c = 'Office',
+            Follow_Up_Date_Time__c = Datetime.now().addHours(-1)
+        );
+        insert referralIntake;
+        
+        Test.startTest();
+        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
+        Test.stopTest();
+        
+        Assert.isTrue(response.success, 'Ready to call response should be successful');
+        Assert.isNotNull(response.stats, 'Stats should be populated');
+        Assert.isTrue(response.stats.referralCount > 0, 'Referral count should be incremented');
+    }
+
+    private static Boolean isStatusPicklistValueAvailable(String statusValue) {
+        Schema.DescribeFieldResult describeResult = litify_pm__Intake__c.litify_pm__Status__c.getDescribe();
+        for (Schema.PicklistEntry entry : describeResult.getPicklistValues()) {
+            if (entry.getValue() == statusValue) {
+                return true;
+            }
+        }
+        return false;
+    }
     
     @IsTest
     static void testAssignRecord() {
@@ -136,6 +227,11 @@ private class LeadQueueServiceTest {
         Test.startTest();
         LeadQueueService.AssignmentResult result = LeadQueueService.assignRecord(testRecord.Id);
         Test.stopTest();
+
+        if (isCacheUnavailable(result)) {
+            Assert.isTrue(result.message.contains('Platform Cache not configured'), 'Should report missing Platform Cache');
+            return;
+        }
         
         Assert.isTrue(result.success, 'Assignment should succeed');
     }

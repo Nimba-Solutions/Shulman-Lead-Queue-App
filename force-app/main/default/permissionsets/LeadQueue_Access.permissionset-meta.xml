@@ -25,6 +25,11 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>false</editable>
+        <field>litify_pm__Intake__c.Case_Type_Priority__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
         <field>litify_pm__Intake__c.Priority_Score__c</field>
         <readable>true</readable>
     </fieldPermissions>

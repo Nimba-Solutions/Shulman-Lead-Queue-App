@@ -1,12 +1,4 @@
-/**
- * Shared utility functions for Lead Queue components
- */
-
 export class SharedUtils {
-    
-    /**
-     * Get user-friendly error message from Salesforce exception
-     */
     static getErrorMessage(error) {
         const userFriendlyMessages = {
             'FIELD_CUSTOM_VALIDATION_EXCEPTION': 'Invalid data provided',
@@ -20,9 +12,6 @@ export class SharedUtils {
         return userFriendlyMessages[errorCode] || 'An error occurred. Please contact your administrator.';
     }
 
-    /**
-     * Format date/time for display
-     */
     static formatTime(dateTimeValue) {
         if (!dateTimeValue) return '';
         
@@ -38,9 +27,6 @@ export class SharedUtils {
         }
     }
 
-    /**
-     * Format call date and time for display
-     */
     static formatCallDateTime(dateTimeValue) {
         if (!dateTimeValue) return '';
         
@@ -60,9 +46,13 @@ export class SharedUtils {
         }
     }
 
-    /**
-     * Constants for the application
-     */
+    static normalizeRecordId(recordId) {
+        if (!recordId) {
+            return recordId;
+        }
+        return recordId.endsWith('-assigned') ? recordId.slice(0, -9) : recordId;
+    }
+
     static get CONSTANTS() {
         return {
             HIGH_PRIORITY_THRESHOLD: 22,
@@ -71,9 +61,6 @@ export class SharedUtils {
         };
     }
 
-    /**
-     * Due date filter options
-     */
     static get dueDateOptions() {
         return [
             { label: 'All Dates', value: '' },

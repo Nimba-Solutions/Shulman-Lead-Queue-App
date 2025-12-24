@@ -12,7 +12,7 @@ import getUserAssignmentData from '@salesforce/apex/LeadQueueService.getUserAssi
 import isCacheConfigured from '@salesforce/apex/LeadQueueService.isCacheConfigured';
 
 // Import utility modules
-import { SharedUtils } from './utils/sharedUtils';
+import { SharedUtils } from 'c/sharedUtils';
 import { ConsoleNavigationManager } from './utils/consoleNavigation';
 import { TimerManager } from './utils/timerManager';
 import { DataProcessor } from './utils/dataProcessor';
@@ -37,7 +37,8 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         highPriorityCount: 0,
         inContactCount: 0,
         noContactCount: 0,
-        retainerSentCount: 0
+        retainerSentCount: 0,
+        referralCount: 0
     };
     
     // Store original stats to always show total values on tiles
@@ -46,13 +47,15 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         highPriorityCount: 0,
         inContactCount: 0,
         noContactCount: 0,
-        retainerSentCount: 0
+        retainerSentCount: 0,
+        referralCount: 0
     };
     
     @track filterOptions = {
         statusOptions: [],
         caseTypeOptions: []
     };
+    tileStatusGroups = {};
     
     @track hasAssignments = false;
     @track records = [];
@@ -74,6 +77,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     filterTimeout;
     filterRequestId = 0;
     hasInitialLoadCompleted = false;
+    isAutoClearingInvalidStatus = false;
     
     // Console navigation detection
     @wire(IsConsoleNavigation) isConsoleNavigation;
@@ -108,11 +112,19 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
                 if (result && result.success) {
                     this.processQueueResponse(result);
                     this.hasInitialLoadCompleted = true;
+                    this.isAutoClearingInvalidStatus = false;
                 } else {
                     const message = result && result.errorMessage
                         ? result.errorMessage
                         : 'Failed to load lead queue.';
+                    if (this.statusFilter && message.includes('Invalid status filter') && !this.isAutoClearingInvalidStatus) {
+                        this.isAutoClearingInvalidStatus = true;
+                        this.statusFilter = '';
+                        this.loadQueueData({ useSoftRefresh: true });
+                        return;
+                    }
                     this.showToast('Error', message, 'error');
+                    this.isAutoClearingInvalidStatus = false;
                 }
             }
         } catch (error) {
@@ -120,9 +132,10 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
                 // Clear data arrays but preserve user filter state for better UX
                 this.records = [];
                 this.originalRecords = [];
-                this.originalStats = { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0 };
-                this.queueStats = { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0 };
+                this.originalStats = { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0, referralCount: 0 };
+                this.queueStats = { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0, referralCount: 0 };
                 this.filterOptions = { statusOptions: [], caseTypeOptions: [] };
+                this.tileStatusGroups = {};
                 
                 // Preserve user selections: statusFilter, caseTypeFilter, dueDateFilter, activeTileFilter remain intact
                 // Only clear operational state, not user preferences
@@ -246,9 +259,10 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         this.originalRecords = [];
         this.records = [];
         this.activeTileFilter = null;
-        this.originalStats = { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0 };
-        this.queueStats = { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0 };
+        this.originalStats = { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0, referralCount: 0 };
+        this.queueStats = { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0, referralCount: 0 };
         this.filterOptions = { statusOptions: [], caseTypeOptions: [] };
+        this.tileStatusGroups = {};
         
         // Reset operational flags
         this.hasAssignments = false;
@@ -335,9 +349,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         const row = event.detail.row;
         
         // Extract original record ID by removing '-assigned' suffix
-        const originalRecordId = row.Id.endsWith('-assigned') 
-            ? row.Id.slice(0, -9) 
-            : row.Id;
+        const originalRecordId = SharedUtils.normalizeRecordId(row.Id);
         
         switch (actionName) {
             case 'assign':
@@ -664,6 +676,10 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     showReadyToCalls() {
         if (this.showScheduledCalls) {
             this.showScheduledCalls = false;
+            this.activeTileFilter = null;
+            if (this.dataProcessor) {
+                this.dataProcessor.updateTileVisualState();
+            }
             // Pure LWC approach - no Aura compatibility layer
             this.loadQueueData();
         }
@@ -672,6 +688,10 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     showScheduledCallsView() {
         if (!this.showScheduledCalls) {
             this.showScheduledCalls = true;
+            this.activeTileFilter = null;
+            if (this.dataProcessor) {
+                this.dataProcessor.updateTileVisualState();
+            }
             // Pure LWC approach - no Aura compatibility layer
             this.loadQueueData();
         }

@@ -187,6 +187,7 @@
 .in-contact-stat .stat-number { color: #28a745; }
 .no-contact-stat .stat-number { color: #f39c12; }
 .retainer-sent-stat .stat-number { color: #6f42c1; }
+.referrals-stat .stat-number { color: #0b7285; }
 
 /* Action Bar */
 .action-bar {
