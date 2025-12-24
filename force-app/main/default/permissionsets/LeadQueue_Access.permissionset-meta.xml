@@ -20,6 +20,16 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>false</editable>
+        <field>litify_pm__Intake__c.Appointment_Date__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
+        <field>litify_pm__Intake__c.Follow_Up_Date_Time__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
         <field>litify_pm__Intake__c.Case_Type_Reporting__c</field>
         <readable>true</readable>
     </fieldPermissions>
