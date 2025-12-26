@@ -10,6 +10,32 @@
     margin-bottom: 0.5rem;
 }
 
+.cache-warning {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: #fef7e0;
+    border: 1px solid #ffb75d;
+    border-radius: 0.25rem;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.cache-warning-icon {
+    --slds-c-icon-color-foreground-default: #ffb75d;
+}
+
+.cache-warning-content {
+    flex: 1;
+    font-size: 0.75rem;
+    color: #514f4d;
+}
+
+.cache-warning-actions {
+    display: flex;
+    align-items: center;
+}
+
 .release-button {
     font-size: 12px;
     min-height: 32px;

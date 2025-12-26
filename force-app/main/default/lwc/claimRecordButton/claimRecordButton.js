@@ -1,29 +1,51 @@
 import { LightningElement, api } from 'lwc';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+import { NavigationMixin } from 'lightning/navigation';
 import assignRecord from '@salesforce/apex/LeadQueueService.assignRecord';
 import releaseUserAssignments from '@salesforce/apex/LeadQueueService.releaseUserAssignments';
 import getUserAssignedRecordIds from '@salesforce/apex/LeadQueueService.getUserAssignedRecordIds';
+import isCacheConfigured from '@salesforce/apex/LeadQueueService.isCacheConfigured';
 import { SharedUtils } from 'c/sharedUtils';
 
-export default class ClaimRecordButton extends LightningElement {
+export default class ClaimRecordButton extends NavigationMixin(LightningElement) {
     @api recordId;
     isAssigning = false;
     isReleasing = false;
     showSuccess = false;
     assignedRecordIds = [];
+    isCacheReady = true;
 
     // Check assignments on component load
     connectedCallback() {
+        this.checkCacheHealth();
         this.checkAssignments();
         // Set up periodic refresh to sync with platform cache
         this.assignmentCheckInterval = setInterval(() => {
             this.checkAssignments();
         }, 5000); // Check every 5 seconds
+        this.cacheHealthInterval = setInterval(() => {
+            this.checkCacheHealth();
+        }, 30000);
     }
 
     disconnectedCallback() {
         if (this.assignmentCheckInterval) {
             clearInterval(this.assignmentCheckInterval);
+        }
+        if (this.cacheHealthInterval) {
+            clearInterval(this.cacheHealthInterval);
+        }
+    }
+
+    async checkCacheHealth() {
+        try {
+            const result = await isCacheConfigured();
+            this.isCacheReady = result;
+            return result;
+        } catch (error) {
+            console.error('Cache health check failed:', error);
+            this.isCacheReady = false;
+            return false;
         }
     }
 
@@ -49,6 +71,10 @@ export default class ClaimRecordButton extends LightningElement {
         return this.assignedRecordIds.length === 0; // No assignments at all
     }
 
+    get showCacheWarning() {
+        return !this.isCacheReady;
+    }
+
     get claimButtonLabel() {
         return this.isAssigning ? 'Claiming...' : 'Claim Record';
     }
@@ -58,16 +84,20 @@ export default class ClaimRecordButton extends LightningElement {
     }
 
     get isClaimButtonDisabled() {
-        return this.isAssigning || this.isReleasing;
+        return this.isAssigning || this.isReleasing || !this.isCacheReady;
     }
 
     get isReleaseButtonDisabled() {
-        return this.isAssigning || this.isReleasing;
+        return this.isAssigning || this.isReleasing || !this.isCacheReady;
     }
 
     async handleClaimRecord() {
         if (!this.recordId) {
             this.showToast('Error', 'No record ID available', 'error');
+            return;
+        }
+        if (!await this.checkCacheHealth()) {
+            this.showToast('Error', 'Platform Cache not configured. Please contact your administrator.', 'error');
             return;
         }
 
@@ -95,6 +125,10 @@ export default class ClaimRecordButton extends LightningElement {
     }
 
     async handleReleaseRecord() {
+        if (!await this.checkCacheHealth()) {
+            this.showToast('Error', 'Platform Cache not configured. Please contact your administrator.', 'error');
+            return;
+        }
         this.isReleasing = true;
         try {
             await releaseUserAssignments();
@@ -132,4 +166,12 @@ export default class ClaimRecordButton extends LightningElement {
         this.dispatchEvent(new ShowToastEvent({ title, message, variant }));
     }
 
+    openCacheSetup() {
+        this[NavigationMixin.Navigate]({
+            type: 'standard__webPage',
+            attributes: {
+                url: '/lightning/setup/PlatformCache/home'
+            }
+        });
+    }
 }

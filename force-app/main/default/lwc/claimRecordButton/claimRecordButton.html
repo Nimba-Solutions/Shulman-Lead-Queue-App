@@ -1,6 +1,17 @@
 <template>
     <lightning-card title="Lead Queue Assignment">
         <div class="slds-p-horizontal_small">
+            <template if:true={showCacheWarning}>
+                <div class="cache-warning" role="alert">
+                    <lightning-icon icon-name="utility:warning" alternative-text="Cache warning" size="small" class="cache-warning-icon"></lightning-icon>
+                    <div class="cache-warning-content">
+                        <strong>Platform Cache unavailable.</strong> Assignments are paused until the cache partition is configured.
+                    </div>
+                    <div class="cache-warning-actions">
+                        <lightning-button variant="base" label="Open Setup" onclick={openCacheSetup}></lightning-button>
+                    </div>
+                </div>
+            </template>
             
             <!-- Show Claim Record button when user has NO assignments -->
             <template if:true={canClaimThisRecord}>

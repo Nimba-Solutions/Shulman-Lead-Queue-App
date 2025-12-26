@@ -11,37 +11,9 @@ public with sharing class LeadQueueService {
         'Pending Referral'
     };
     
-    private static final Set<String> ALL_QUEUE_STATUSES = new Set<String>{
-        'Lead Generated',
-        'Intake Scheduled',
-        'In Contact/Under Review',
-        'Missed Appointment',
-        'Intake Package Sent',
-        'Attempting to Contact',
-        'Questionnaire',
-        'Pending Referral'
-    };
-    
-    private static final Set<String> READY_TO_CALL_STATUSES = new Set<String>{
-        'Lead Generated',
-        'Intake Scheduled',
-        'In Contact/Under Review',
-        'Missed Appointment',
-        'Intake Package Sent',
-        'Attempting to Contact',
-        'Questionnaire',
-        'Pending Referral'
-    };
-    
-    private static final Set<String> SCHEDULED_CALL_STATUSES = new Set<String>{
-        'Lead Generated',
-        'Intake Scheduled',
-        'In Contact/Under Review',
-        'Missed Appointment',
-        'Intake Package Sent',
-        'Attempting to Contact',
-        'Questionnaire'
-    };
+    private static final Set<String> ALL_QUEUE_STATUSES = new Set<String>(STATUS_ORDER);
+    private static final Set<String> READY_TO_CALL_STATUSES = ALL_QUEUE_STATUSES;
+    private static final Set<String> SCHEDULED_CALL_STATUSES = buildScheduledCallStatuses();
     
     private static final Map<String, Set<String>> TILE_STATUS_GROUPS = new Map<String, Set<String>>{
         'highPriority' => new Set<String>{'Intake Scheduled', 'Lead Generated'},
@@ -59,7 +31,6 @@ public with sharing class LeadQueueService {
     private static final Integer ASSIGNMENT_TTL = 1800; // 30 minutes
     private static final String CACHE_PARTITION = 'local.LeadQueueCache';
     private static final Integer HIGH_PRIORITY_THRESHOLD = 22;
-    private static final Integer MEDIUM_PRIORITY_THRESHOLD = 55;
     private static final String READY_TO_CALL_ORDER_BY = 'ORDER BY Priority_Score__c ASC, Call_at_Date__c ASC';
     private static final String SCHEDULED_CALL_ORDER_BY = 'ORDER BY Call_at_Date__c ASC';
     private static final String REQUIRED_FIELDS = 'Id, Name, litify_pm__Display_Name__c, Referred_By_Name__c, litify_pm__Status__c, Priority_Score__c, CreatedDate, Case_Type_Reporting__c, Type__c, Call_at_Date__c, litify_pm__Phone__c, litify_pm__Sign_Up_Method__c, Test_Record__c, Qualification_Status__c';
@@ -105,6 +76,12 @@ public with sharing class LeadQueueService {
             fields.add(fieldName);
         }
         return fields;
+    }
+
+    private static Set<String> buildScheduledCallStatuses() {
+        Set<String> result = new Set<String>(STATUS_ORDER);
+        result.remove('Pending Referral');
+        return result;
     }
     
     @AuraEnabled
@@ -480,7 +457,6 @@ public with sharing class LeadQueueService {
         // Add the datetime bind variables for the base filter
         Datetime nowValue = Datetime.now();
         bindVars.put('now', nowValue);
-        bindVars.put('twoHoursAgo', nowValue.addHours(-2));
         bindVars.put('twoHoursFromNow', nowValue.addHours(2));
         bindVars.put('fourHoursAgo', nowValue.addHours(-4));
         bindVars.put('twoWeeksFromNow', nowValue.addDays(14));
@@ -526,11 +502,21 @@ public with sharing class LeadQueueService {
         
         // Collect all assigned user IDs for batch query
         Set<Id> assignedUserIds = new Set<Id>();
+        Map<Id, String> assignedUserByRecord = new Map<Id, String>();
+        Map<Id, Long> assignedTimestampByRecord = new Map<Id, Long>();
         for (litify_pm__Intake__c record : records) {
             if (isValidQueueRecord(record)) {
-                String assignedUserId = getAssignedUserId(record.Id);
-                if (String.isNotBlank(assignedUserId)) {
-                    assignedUserIds.add(assignedUserId);
+                Map<String, Object> assignmentData = getAssignmentData(record.Id);
+                if (assignmentData != null) {
+                    String assignedUserId = (String) assignmentData.get('userId');
+                    if (String.isNotBlank(assignedUserId)) {
+                        assignedUserByRecord.put(record.Id, assignedUserId);
+                        assignedUserIds.add(assignedUserId);
+                    }
+                    Long assignedAt = parseAssignmentTimestamp(assignmentData.get('assignedAt'));
+                    if (assignedAt != null) {
+                        assignedTimestampByRecord.put(record.Id, assignedAt);
+                    }
                 }
             }
         }
@@ -552,7 +538,7 @@ public with sharing class LeadQueueService {
         for (litify_pm__Intake__c record : records) {
             // Validate record meets business criteria before processing
             if (isValidQueueRecord(record)) {
-                queueRecords.add(createQueueRecord(record, userIdToNameMap));
+                queueRecords.add(createQueueRecord(record, userIdToNameMap, assignedUserByRecord, assignedTimestampByRecord));
             }
         }
         return queueRecords;
@@ -566,16 +552,17 @@ public with sharing class LeadQueueService {
                 || LeadQueueConfig.CASE_TYPE_PRIORITY.containsKey(record.Case_Type_Reporting__c));
     }
     
-    private static QueueRecord createQueueRecord(litify_pm__Intake__c record, Map<Id, String> userIdToNameMap) {
+    private static QueueRecord createQueueRecord(litify_pm__Intake__c record, Map<Id, String> userIdToNameMap, Map<Id, String> assignedUserByRecord, Map<Id, Long> assignedTimestampByRecord) {
         QueueRecord qr = new QueueRecord();
+        String assignedUserId = assignedUserByRecord.get(record.Id);
         qr.record = record;
         qr.priorityScore = record.Priority_Score__c != null ? Integer.valueOf(record.Priority_Score__c) : 99;
         qr.isHighPriority = qr.priorityScore <= HIGH_PRIORITY_THRESHOLD;
         qr.isDueToday = isDueToday(record.Call_at_Date__c);
         qr.isOverdue = isOverdue(record.Call_at_Date__c);
-        qr.isAssigned = isRecordAssigned(record.Id);
-        qr.assignedTo = getAssignedUserNameFromMap(record.Id, userIdToNameMap);
-        qr.assignedTimestamp = getAssignmentTimestamp(record.Id);
+        qr.isAssigned = String.isNotBlank(assignedUserId);
+        qr.assignedTo = assignedUserId != null ? userIdToNameMap.get(assignedUserId) ?? '' : '';
+        qr.assignedTimestamp = assignedTimestampByRecord.get(record.Id);
         return qr;
     }
     
@@ -627,7 +614,7 @@ public with sharing class LeadQueueService {
         
         options.caseTypeOptions = new List<PicklistOption>();
         options.caseTypeOptions.add(new PicklistOption('All Case Types', ''));
-        for (String caseType : LeadQueueConfig.CASE_TYPE_PRIORITY.keySet()) {
+        for (String caseType : getOrderedCaseTypes()) {
             options.caseTypeOptions.add(new PicklistOption(caseType, caseType));
         }
         
@@ -653,6 +640,39 @@ public with sharing class LeadQueueService {
         }
         return result;
     }
+
+    private static List<String> getOrderedCaseTypes() {
+        List<String> caseTypes = new List<String>(LeadQueueConfig.CASE_TYPE_PRIORITY.keySet());
+        caseTypes.sort(new CaseTypePriorityComparator());
+        return caseTypes;
+    }
+
+    private class CaseTypePriorityComparator implements Comparator<String> {
+        public Integer compare(String a, String b) {
+            if (a == null && b == null) {
+                return 0;
+            }
+            if (a == null) {
+                return 1;
+            }
+            if (b == null) {
+                return -1;
+            }
+            Integer aPriority = LeadQueueConfig.CASE_TYPE_PRIORITY.get(a);
+            Integer bPriority = LeadQueueConfig.CASE_TYPE_PRIORITY.get(b);
+            if (aPriority == null && bPriority == null) {
+                return a.toLowerCase().compareTo(b.toLowerCase());
+            }
+            if (aPriority == null) {
+                return 1;
+            }
+            if (bPriority == null) {
+                return -1;
+            }
+            Integer diff = aPriority - bPriority;
+            return diff != 0 ? diff : a.toLowerCase().compareTo(b.toLowerCase());
+        }
+    }
     
     
     private static Boolean isRecordAssigned(String recordId) {
@@ -671,16 +691,6 @@ public with sharing class LeadQueueService {
         }
     }
     
-    
-    private static String getAssignedUserId(String recordId) {
-        try {
-            Map<String, Object> assignmentData = getAssignmentData(recordId);
-            return assignmentData != null ? (String) assignmentData.get('userId') : '';
-        } catch (Exception e) {
-            System.debug('Error getting assigned user ID: ' + e.getMessage());
-            return '';
-        }
-    }
     
     private static Map<String, Object> getAssignmentData(String recordId) {
         try {
@@ -717,39 +727,26 @@ public with sharing class LeadQueueService {
             if (assignmentData == null || !assignmentData.containsKey('assignedAt')) {
                 return null;
             }
-            
-            Object rawValue = assignmentData.get('assignedAt');
-            if (rawValue == null) {
-                return null;
-            }
-            
-            if (rawValue instanceof Long) {
-                return (Long) rawValue;
-            }
-            
-            try {
-                Decimal numericValue = Decimal.valueOf(String.valueOf(rawValue));
-                return numericValue != null ? numericValue.longValue() : null;
-            } catch (Exception parseError) {
-                System.debug('Assignment timestamp parse error for record ' + recordId + ': ' + parseError.getMessage());
-                return null;
-            }
+            return parseAssignmentTimestamp(assignmentData.get('assignedAt'));
         } catch (Exception e) {
             System.debug('Error getting assignment timestamp: ' + e.getMessage());
             return null;
         }
     }
-    
-    private static String getAssignedUserNameFromMap(String recordId, Map<Id, String> userIdToNameMap) {
+
+    private static Long parseAssignmentTimestamp(Object rawValue) {
+        if (rawValue == null) {
+            return null;
+        }
+        if (rawValue instanceof Long) {
+            return (Long) rawValue;
+        }
         try {
-            String assignedUserId = getAssignedUserId(recordId);
-            if (String.isBlank(assignedUserId)) {
-                return '';
-            }
-            return userIdToNameMap.get(assignedUserId) ?? '';
-        } catch (Exception e) {
-            System.debug('Error getting assigned user name from map: ' + e.getMessage());
-            return '';
+            Decimal numericValue = Decimal.valueOf(String.valueOf(rawValue));
+            return numericValue != null ? numericValue.longValue() : null;
+        } catch (Exception parseError) {
+            System.debug('Assignment timestamp parse error: ' + parseError.getMessage());
+            return null;
         }
     }
     
@@ -901,7 +898,7 @@ public with sharing class LeadQueueService {
             return new ValidationResult(false, 'Invalid status filter: ' + statusFilter + '. Valid options: ' + String.join(validStatuses, ', '));
         }
         if (String.isNotBlank(caseTypeFilter) && !LeadQueueConfig.CASE_TYPE_PRIORITY.containsKey(caseTypeFilter)) {
-            return new ValidationResult(false, 'Invalid case type filter: ' + caseTypeFilter + '. Valid options: ' + String.join(LeadQueueConfig.CASE_TYPE_PRIORITY.keySet(), ', '));
+            return new ValidationResult(false, 'Invalid case type filter: ' + caseTypeFilter + '. Valid options: ' + String.join(getOrderedCaseTypes(), ', '));
         }
         if (String.isNotBlank(dueDateFilter) && !isValidDateFilter(dueDateFilter)) {
             return new ValidationResult(false, 'Invalid date filter: ' + dueDateFilter + '. Valid options: today, thisWeek, nextWeek');

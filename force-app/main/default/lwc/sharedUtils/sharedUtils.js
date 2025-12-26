@@ -55,8 +55,6 @@ export class SharedUtils {
 
     static get CONSTANTS() {
         return {
-            HIGH_PRIORITY_THRESHOLD: 22,
-            MEDIUM_PRIORITY_THRESHOLD: 55,
             REFRESH_INTERVAL: 30000
         };
     }
