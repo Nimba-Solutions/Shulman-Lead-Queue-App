@@ -35,7 +35,7 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>false</editable>
-        <field>litify_pm__Intake__c.Case_Type_Priority__c</field>
+        <field>litify_pm__Intake__c.Queue_Case_Type__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>

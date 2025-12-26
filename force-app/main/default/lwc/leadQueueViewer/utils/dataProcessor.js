@@ -48,7 +48,7 @@ export class DataProcessor {
                     litify_pm__Display_Name__c: record.litify_pm__Display_Name__c || '',
                     Referred_By_Name__c: record.Referred_By_Name__c || '',
                     Status: record.litify_pm__Status__c || '',
-                    CaseType: record.Case_Type_Reporting__c || '',
+                    CaseType: record.Queue_Case_Type__c || '',
                     Qualification_Status__c: record.Qualification_Status__c || '',
                     callDateTime: SharedUtils.formatCallDateTime(record.Call_at_Date__c),
                     Phone: record.litify_pm__Phone__c || '',

@@ -32,11 +32,11 @@ public class CustomIntakeTriggerHandler {
     }
     
     private static void handleBeforeInsert(List<litify_pm__Intake__c> newRecords) {
-        applyCaseTypePriority(newRecords);
+        applyQueuePriority(newRecords);
     }
     
     private static void handleBeforeUpdate(List<litify_pm__Intake__c> newRecords, Map<Id, SObject> oldRecordsMap) {
-        applyCaseTypePriority(newRecords);
+        applyQueuePriority(newRecords);
     }
     
     private static void handleBeforeDelete(List<litify_pm__Intake__c> oldRecords) {
@@ -61,14 +61,12 @@ public class CustomIntakeTriggerHandler {
         // Add after undelete logic here
     }
 
-    private static void applyCaseTypePriority(List<litify_pm__Intake__c> records) {
+    private static void applyQueuePriority(List<litify_pm__Intake__c> records) {
         for (litify_pm__Intake__c record : records) {
-            String caseType = record.Case_Type_Reporting__c;
-            Integer priority = LeadQueueConfig.CASE_TYPE_PRIORITY.get(caseType);
-            if (priority == null) {
-                priority = LeadQueueConfig.DEFAULT_CASE_TYPE_PRIORITY;
-            }
-            record.Case_Type_Priority__c = priority;
+            String queueCaseType = LeadQueueConfig.normalizeCaseType(record.Type__c, record.Case_Type__c);
+            Integer caseTypePriority = LeadQueueConfig.getCaseTypePriority(queueCaseType);
+            record.Queue_Case_Type__c = queueCaseType;
+            record.Priority_Score__c = LeadQueueConfig.calculatePriorityScore(record.litify_pm__Status__c, caseTypePriority);
         }
     }
 }

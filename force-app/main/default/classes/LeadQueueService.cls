@@ -1,15 +1,6 @@
 public with sharing class LeadQueueService {
     
-    private static final List<String> STATUS_ORDER = new List<String>{
-        'Lead Generated',
-        'Intake Scheduled',
-        'In Contact/Under Review',
-        'Missed Appointment',
-        'Intake Package Sent',
-        'Attempting to Contact',
-        'Questionnaire',
-        'Pending Referral'
-    };
+    private static final List<String> STATUS_ORDER = LeadQueueConfig.STATUS_ORDER;
     
     private static final Set<String> ALL_QUEUE_STATUSES = new Set<String>(STATUS_ORDER);
     private static final Set<String> READY_TO_CALL_STATUSES = ALL_QUEUE_STATUSES;
@@ -33,7 +24,7 @@ public with sharing class LeadQueueService {
     private static final Integer HIGH_PRIORITY_THRESHOLD = 22;
     private static final String READY_TO_CALL_ORDER_BY = 'ORDER BY Priority_Score__c ASC, Call_at_Date__c ASC';
     private static final String SCHEDULED_CALL_ORDER_BY = 'ORDER BY Call_at_Date__c ASC';
-    private static final String REQUIRED_FIELDS = 'Id, Name, litify_pm__Display_Name__c, Referred_By_Name__c, litify_pm__Status__c, Priority_Score__c, CreatedDate, Case_Type_Reporting__c, Type__c, Call_at_Date__c, litify_pm__Phone__c, litify_pm__Sign_Up_Method__c, Test_Record__c, Qualification_Status__c';
+    private static final String REQUIRED_FIELDS = 'Id, Name, litify_pm__Display_Name__c, Referred_By_Name__c, litify_pm__Status__c, Priority_Score__c, CreatedDate, Queue_Case_Type__c, Type__c, Call_at_Date__c, litify_pm__Phone__c, litify_pm__Sign_Up_Method__c, Test_Record__c, Qualification_Status__c';
     private static final Set<String> REQUIRED_FIELD_SET = buildRequiredFieldSet();
     private static final String ASSIGNMENT_CACHE_PREFIX = 'assign';
     private static final String USER_CACHE_PREFIX = 'user';
@@ -522,7 +513,7 @@ public with sharing class LeadQueueService {
         }
         
         if (String.isNotBlank(caseTypeFilter)) {
-            conditions.add('Case_Type_Reporting__c = :caseTypeFilter');
+            conditions.add('Queue_Case_Type__c = :caseTypeFilter');
             bindVars.put('caseTypeFilter', caseTypeFilter);
         }
         
@@ -600,8 +591,8 @@ public with sharing class LeadQueueService {
         return record.Call_at_Date__c != null
             && String.isNotBlank(record.litify_pm__Status__c)
             && getAllQueueStatuses().contains(record.litify_pm__Status__c)
-            && (String.isBlank(record.Case_Type_Reporting__c)
-                || LeadQueueConfig.CASE_TYPE_PRIORITY.containsKey(record.Case_Type_Reporting__c));
+            && (String.isBlank(record.Queue_Case_Type__c)
+                || LeadQueueConfig.CASE_TYPE_PRIORITY.containsKey(record.Queue_Case_Type__c));
     }
 
     private static Boolean isEligibleForAssignment(litify_pm__Intake__c record) {

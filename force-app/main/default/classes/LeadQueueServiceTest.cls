@@ -6,7 +6,7 @@ private class LeadQueueServiceTest {
         List<litify_pm__Intake__c> testIntakes = new List<litify_pm__Intake__c>();
         
         // Test records with only writable fields
-        // Note: Call_at_Date__c, Case_Type_Reporting__c, Priority_Score__c are read-only/formula fields
+        // Note: Call_at_Date__c is a formula field; Queue_Case_Type__c and Priority_Score__c are set by triggers.
         testIntakes.add(new litify_pm__Intake__c(
             litify_pm__Status__c = 'Intake Scheduled',
             Type__c = 'Personal Injury',
@@ -76,7 +76,7 @@ private class LeadQueueServiceTest {
         ));
         
         // Add test records for remaining case types to ensure complete coverage
-        // Note: Case_Type_Reporting__c is a formula field and cannot be set directly
+        // Note: Queue_Case_Type__c is set by triggers based on Type__c and Case_Type__c
         testIntakes.add(new litify_pm__Intake__c(
             litify_pm__Status__c = 'Lead Generated',
             Type__c = 'Personal Injury',
@@ -109,12 +109,12 @@ private class LeadQueueServiceTest {
         
         // Verify fields are populated by triggers/formulas after insert
         List<litify_pm__Intake__c> insertedRecords = [
-            SELECT Id, Call_at_Date__c, Case_Type_Reporting__c, Priority_Score__c
+            SELECT Id, Call_at_Date__c, Queue_Case_Type__c, Priority_Score__c
             FROM litify_pm__Intake__c 
             WHERE Id IN :testIntakes
         ];
         
-        System.debug('Test records created with populated formula fields: ' + insertedRecords.size());
+        System.debug('Test records created with populated computed fields: ' + insertedRecords.size());
     }
     
     @IsTest
@@ -471,17 +471,17 @@ private class LeadQueueServiceTest {
             Test.stopTest();
             System.assertEquals(true, response.success, 'Next week query should succeed for permitted user: ' + response.errorMessage);
             litify_pm__Intake__c runAsRecord = [
-                SELECT Call_at_Date__c, Case_Type_Reporting__c
+                SELECT Call_at_Date__c, Queue_Case_Type__c
                 FROM litify_pm__Intake__c
                 WHERE Id = :futureIntake.Id
                 LIMIT 1
             ];
             runAsCallDate = runAsRecord.Call_at_Date__c;
-            runAsCaseType = runAsRecord.Case_Type_Reporting__c;
+            runAsCaseType = runAsRecord.Queue_Case_Type__c;
         }
 
         System.assertEquals(followUpTime, runAsCallDate, 'Call at date should reflect the staged follow-up time');
-        System.assertEquals('MVA', runAsCaseType, 'Case type reporting should map to the dependent value');
+        System.assertEquals('MVA', runAsCaseType, 'Queue case type should map to the dependent value');
     }
     
     @IsTest
@@ -1283,14 +1283,14 @@ private class LeadQueueServiceTest {
     }
 
     @IsTest
-    static void testNullCaseTypeReportingAllowedInValidation() {
-        // This test verifies that the isValidQueueRecord validation logic allows NULL Case_Type_Reporting__c
+    static void testNullQueueCaseTypeAllowedInValidation() {
+        // This test verifies that the isValidQueueRecord validation logic allows NULL Queue_Case_Type__c
         // The real-world test is that record a0CUo00003SffAbMAJ now appears in production
 
         // Simulate cache
         LeadQueueService.enableCacheSimulation(true);
 
-        // Create a test record with NULL case type that will result in NULL Case_Type_Reporting__c
+        // Create a test record with NULL case type that will result in NULL Queue_Case_Type__c
         litify_pm__Intake__c testRecord = new litify_pm__Intake__c(
             litify_pm__Display_Name__c = 'Test NULL Case Type Validation',
             litify_pm__Status__c = 'Lead Generated',
@@ -1314,7 +1314,7 @@ private class LeadQueueServiceTest {
         Assert.isTrue(response.success, 'Query should succeed with NULL case type records present');
         Assert.isNotNull(response.records, 'Records should be returned');
 
-        // Verify the formula calculated priority correctly for NULL case type (if found)
+        // Verify the stored priority score uses the default case type for NULL case type (if found)
         for (LeadQueueService.QueueRecord qr : response.records) {
             if (qr.record.Id == testRecord.Id) {
                 // Priority should be 18 (Lead Generated=1 * 10 + NULL=8)
@@ -1356,8 +1356,8 @@ private class LeadQueueServiceTest {
         // Simulate cache
         LeadQueueService.enableCacheSimulation(true);
 
-        // Create record with valid base Type but simulate what would be an invalid Case_Type_Reporting__c
-        // Note: We can't actually create an invalid Case_Type_Reporting__c via formula,
+        // Create record with valid base Type but simulate what would be an invalid Queue_Case_Type__c
+        // Note: We can't easily create an invalid Queue_Case_Type__c via trigger logic,
         // so this test verifies the isValidQueueRecord logic would reject such a record
         // by checking that only valid types are returned
         litify_pm__Intake__c testRecord = new litify_pm__Intake__c(
