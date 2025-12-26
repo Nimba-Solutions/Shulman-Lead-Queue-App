@@ -12,6 +12,17 @@ export class SharedUtils {
         return userFriendlyMessages[errorCode] || 'An error occurred. Please contact your administrator.';
     }
 
+    static getDefaultStats() {
+        return {
+            totalRecords: 0,
+            highPriorityCount: 0,
+            inContactCount: 0,
+            noContactCount: 0,
+            retainerSentCount: 0,
+            referralCount: 0
+        };
+    }
+
     static formatTime(dateTimeValue) {
         if (!dateTimeValue) return '';
         

@@ -22,7 +22,8 @@ export class DataProcessor {
         }
         
         // Safe assignment with fallbacks - store original stats and keep them fixed
-        this.component.originalStats = data.stats || { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0, referralCount: 0 };
+        const stats = data.stats ? { ...data.stats } : SharedUtils.getDefaultStats();
+        this.component.originalStats = stats;
         // queueStats should always show original values, never update with filters
         this.component.queueStats = { ...this.component.originalStats };
         this.component.filterOptions = data.filters || { statusOptions: [], caseTypeOptions: [] };
@@ -73,8 +74,8 @@ export class DataProcessor {
     resetToEmptyState() {
         this.component.records = [];
         this.component.originalRecords = [];
-        this.component.originalStats = { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0, referralCount: 0 };
-        this.component.queueStats = { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0, referralCount: 0 };
+        this.component.originalStats = SharedUtils.getDefaultStats();
+        this.component.queueStats = SharedUtils.getDefaultStats();
         this.component.filterOptions = { statusOptions: [], caseTypeOptions: [] };
         this.component.tileStatusGroups = {};
     }

@@ -10,11 +10,6 @@
         <target>SH_Intakes_App</target>
         <type>PermissionSetGroup</type>
     </userAccessPolicyActions>
-    <userAccessPolicyActions>
-        <action>Grant</action>
-        <target>LeadQueue_Access</target>
-        <type>PermissionSet</type>
-    </userAccessPolicyActions>
     <userAccessPolicyFilters>
         <operation>in</operation>
         <sortOrder>1</sortOrder>

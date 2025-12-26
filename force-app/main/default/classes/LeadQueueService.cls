@@ -170,17 +170,32 @@ public with sharing class LeadQueueService {
             if (!isValidSalesforceId(recordId)) {
                 return new AssignmentResult(false, 'Invalid record ID format');
             }
+
+            if (!Schema.sObjectType.litify_pm__Intake__c.isAccessible()) {
+                return new AssignmentResult(false, 'Insufficient permissions to access intake records');
+            }
+
+            try {
+                validateFieldAccess();
+            } catch (Exception e) {
+                return new AssignmentResult(false, 'Missing required field permissions: ' + e.getMessage());
+            }
             
-            List<litify_pm__Intake__c> records = [
-                SELECT Id FROM litify_pm__Intake__c
-                WHERE Id = :recordId
-                AND (Type__c NOT IN :EXCLUDED_INTAKE_TYPES OR Type__c = null)
-                LIMIT 1
-            ];
+            String query = 'SELECT ' + REQUIRED_FIELDS +
+                ' FROM litify_pm__Intake__c' +
+                ' WHERE Id = :recordId' +
+                ' AND (Type__c NOT IN :excludedTypes OR Type__c = null)' +
+                ' LIMIT 1';
+            Map<String, Object> bindVars = new Map<String, Object>{
+                'recordId' => recordId,
+                'excludedTypes' => EXCLUDED_INTAKE_TYPES
+            };
+            List<litify_pm__Intake__c> records = Database.queryWithBinds(query, bindVars, AccessLevel.USER_MODE);
             
             if (records.isEmpty()) {
                 return new AssignmentResult(false, 'Record not found or not accessible');
             }
+            litify_pm__Intake__c record = records[0];
             
             String userId = UserInfo.getUserId();
             Cache.OrgPartition orgCache = getCachePartition();
@@ -195,6 +210,10 @@ public with sharing class LeadQueueService {
             // Check if record is already assigned
             if (isRecordAssigned(recordId)) {
                 return new AssignmentResult(false, 'Record already assigned to another user');
+            }
+
+            if (!isEligibleForAssignment(record)) {
+                return new AssignmentResult(false, 'Record is not eligible for Lead Queue assignment');
             }
             
             if (useSimulatedCache) {
@@ -286,6 +305,39 @@ public with sharing class LeadQueueService {
         } catch (Exception e) {
             System.debug('User assignments error: ' + e.getMessage());
             return new Map<String, Long>();
+        }
+    }
+
+    @AuraEnabled(cacheable=true)
+    public static AssignedRecordSummary getAssignedRecordSummary(String recordId) {
+        try {
+            if (String.isBlank(recordId) || !isValidSalesforceId(recordId)) {
+                return null;
+            }
+
+            if (!Schema.sObjectType.litify_pm__Intake__c.isAccessible()) {
+                return null;
+            }
+
+            String query = 'SELECT Id, Name, litify_pm__Display_Name__c, litify_pm__Status__c' +
+                ' FROM litify_pm__Intake__c WHERE Id = :recordId LIMIT 1';
+            Map<String, Object> bindVars = new Map<String, Object>{ 'recordId' => recordId };
+            List<litify_pm__Intake__c> records = Database.queryWithBinds(query, bindVars, AccessLevel.USER_MODE);
+            if (records.isEmpty()) {
+                return null;
+            }
+
+            litify_pm__Intake__c record = records[0];
+            AssignedRecordSummary summary = new AssignedRecordSummary();
+            summary.recordId = record.Id;
+            summary.displayName = String.isNotBlank(record.litify_pm__Display_Name__c)
+                ? record.litify_pm__Display_Name__c
+                : record.Name;
+            summary.status = record.litify_pm__Status__c;
+            return summary;
+        } catch (Exception e) {
+            System.debug('getAssignedRecordSummary error: ' + e.getMessage());
+            return null;
         }
     }
     
@@ -550,6 +602,56 @@ public with sharing class LeadQueueService {
             && getAllQueueStatuses().contains(record.litify_pm__Status__c)
             && (String.isBlank(record.Case_Type_Reporting__c)
                 || LeadQueueConfig.CASE_TYPE_PRIORITY.containsKey(record.Case_Type_Reporting__c));
+    }
+
+    private static Boolean isEligibleForAssignment(litify_pm__Intake__c record) {
+        if (!isValidQueueRecord(record)) {
+            return false;
+        }
+        if (record.Test_Record__c == true) {
+            return false;
+        }
+        Datetime nowValue = Datetime.now();
+        return isEligibleForReadyToCall(record, nowValue)
+            || isEligibleForScheduledCalls(record, nowValue);
+    }
+
+    private static Boolean isEligibleForReadyToCall(litify_pm__Intake__c record, Datetime nowValue) {
+        if (record.Call_at_Date__c == null || String.isBlank(record.litify_pm__Status__c)) {
+            return false;
+        }
+        String status = record.litify_pm__Status__c;
+        if (getReadyToCallStandardStatuses().contains(status)) {
+            return record.Call_at_Date__c <= nowValue;
+        }
+        if (status == 'Questionnaire') {
+            return record.Call_at_Date__c <= nowValue.addHours(-4);
+        }
+        if (status == 'Intake Scheduled') {
+            Boolean validMethod = record.litify_pm__Sign_Up_Method__c == 'E-Sign'
+                || record.litify_pm__Sign_Up_Method__c == 'Office';
+            return validMethod && record.Call_at_Date__c <= nowValue;
+        }
+        return false;
+    }
+
+    private static Boolean isEligibleForScheduledCalls(litify_pm__Intake__c record, Datetime nowValue) {
+        if (record.Call_at_Date__c == null || String.isBlank(record.litify_pm__Status__c)) {
+            return false;
+        }
+        String status = record.litify_pm__Status__c;
+        if (getScheduledCallStandardStatuses().contains(status)) {
+            return record.Call_at_Date__c >= nowValue;
+        }
+        if (status == 'Intake Scheduled') {
+            if (record.litify_pm__Sign_Up_Method__c == 'E-Sign') {
+                return record.Call_at_Date__c >= nowValue;
+            }
+            if (record.litify_pm__Sign_Up_Method__c == 'Office') {
+                return record.Call_at_Date__c >= nowValue.addHours(2);
+            }
+        }
+        return false;
     }
     
     private static QueueRecord createQueueRecord(litify_pm__Intake__c record, Map<Id, String> userIdToNameMap, Map<Id, String> assignedUserByRecord, Map<Id, Long> assignedTimestampByRecord) {
@@ -880,6 +982,12 @@ public with sharing class LeadQueueService {
             this.success = success;
             this.message = message;
         }
+    }
+
+    public class AssignedRecordSummary {
+        @AuraEnabled public Id recordId { get; set; }
+        @AuraEnabled public String displayName { get; set; }
+        @AuraEnabled public String status { get; set; }
     }
     
     public class ValidationResult {

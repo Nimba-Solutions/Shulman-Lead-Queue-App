@@ -10,6 +10,7 @@ import assignNextAvailableRecord from '@salesforce/apex/LeadQueueService.assignN
 import releaseUserAssignments from '@salesforce/apex/LeadQueueService.releaseUserAssignments';
 import getUserAssignmentData from '@salesforce/apex/LeadQueueService.getUserAssignmentData';
 import isCacheConfigured from '@salesforce/apex/LeadQueueService.isCacheConfigured';
+import getAssignedRecordSummary from '@salesforce/apex/LeadQueueService.getAssignedRecordSummary';
 
 // Import utility modules
 import { SharedUtils } from 'c/sharedUtils';
@@ -32,24 +33,10 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     timerManager;
     dataProcessor;
     
-    @track queueStats = {
-        totalRecords: 0,
-        highPriorityCount: 0,
-        inContactCount: 0,
-        noContactCount: 0,
-        retainerSentCount: 0,
-        referralCount: 0
-    };
+    @track queueStats = SharedUtils.getDefaultStats();
     
     // Store original stats to always show total values on tiles
-    originalStats = {
-        totalRecords: 0,
-        highPriorityCount: 0,
-        inContactCount: 0,
-        noContactCount: 0,
-        retainerSentCount: 0,
-        referralCount: 0
-    };
+    originalStats = SharedUtils.getDefaultStats();
     
     @track filterOptions = {
         statusOptions: [],
@@ -60,6 +47,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     @track hasAssignments = false;
     @track records = [];
     originalRecords = [];
+    @track assignedRecordSummary = null;
     @track currentTime = new Date();
     currentUserId = Id;
     userAssignedRecordIds = [];
@@ -111,6 +99,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
             if (this.filterRequestId === currentRequestId) {
                 if (result && result.success) {
                     this.processQueueResponse(result);
+                    this.updateAssignedRecordSummaryFromDataset();
                     this.hasInitialLoadCompleted = true;
                     this.isAutoClearingInvalidStatus = false;
                 } else {
@@ -132,8 +121,8 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
                 // Clear data arrays but preserve user filter state for better UX
                 this.records = [];
                 this.originalRecords = [];
-                this.originalStats = { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0, referralCount: 0 };
-                this.queueStats = { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0, referralCount: 0 };
+                this.originalStats = SharedUtils.getDefaultStats();
+                this.queueStats = SharedUtils.getDefaultStats();
                 this.filterOptions = { statusOptions: [], caseTypeOptions: [] };
                 this.tileStatusGroups = {};
                 
@@ -191,6 +180,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         this.hasAssignments = false;
         this.userAssignedRecordIds = [];
         this.userAssignmentTimestamps = {};
+        this.assignedRecordSummary = null;
     }
     
     connectedCallback() {
@@ -259,8 +249,8 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         this.originalRecords = [];
         this.records = [];
         this.activeTileFilter = null;
-        this.originalStats = { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0, referralCount: 0 };
-        this.queueStats = { totalRecords: 0, highPriorityCount: 0, inContactCount: 0, noContactCount: 0, retainerSentCount: 0, referralCount: 0 };
+        this.originalStats = SharedUtils.getDefaultStats();
+        this.queueStats = SharedUtils.getDefaultStats();
         this.filterOptions = { statusOptions: [], caseTypeOptions: [] };
         this.tileStatusGroups = {};
         
@@ -268,6 +258,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         this.hasAssignments = false;
         this.isAssigning = false;
         this.isReleasing = false;
+        this.assignedRecordSummary = null;
 
         // Clean up utility managers
         this.consoleNavigation = null;
@@ -438,6 +429,12 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
             this.userAssignedRecordIds = Object.keys(assignmentData);
             this.userAssignmentTimestamps = assignmentData;
             this.hasAssignments = this.userAssignedRecordIds.length > 0;
+
+            if (this.hasAssignments) {
+                await this.refreshAssignedRecordSummary();
+            } else {
+                this.assignedRecordSummary = null;
+            }
             
             // If assignment status changed, force template refresh
             if (oldHasAssignments !== this.hasAssignments) {
@@ -451,6 +448,70 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         } catch (error) {
             console.error('Check assignments error details:', error);
             this.showToast('Error', 'Failed to check assignments: ' + this.getErrorMessage(error), 'error');
+        }
+    }
+
+    findAssignedRecordInDataset(recordId) {
+        if (!recordId) {
+            return null;
+        }
+        const sources = [this.records, this.originalRecords];
+        for (const list of sources) {
+            if (!Array.isArray(list)) {
+                continue;
+            }
+            const match = list.find(record => SharedUtils.normalizeRecordId(record.Id) === recordId);
+            if (match) {
+                return match;
+            }
+        }
+        return null;
+    }
+
+    updateAssignedRecordSummaryFromDataset() {
+        if (!this.hasAssignments || !Array.isArray(this.userAssignedRecordIds) || this.userAssignedRecordIds.length === 0) {
+            return;
+        }
+        const recordId = this.userAssignedRecordIds[0];
+        const match = this.findAssignedRecordInDataset(recordId);
+        if (match) {
+            this.assignedRecordSummary = {
+                recordId,
+                displayName: match.litify_pm__Display_Name__c || match.Name || 'Assigned Record',
+                status: match.Status || null
+            };
+        }
+    }
+
+    async refreshAssignedRecordSummary() {
+        if (!this.hasAssignments || !Array.isArray(this.userAssignedRecordIds) || this.userAssignedRecordIds.length === 0) {
+            this.assignedRecordSummary = null;
+            return;
+        }
+        const recordId = this.userAssignedRecordIds[0];
+        const match = this.findAssignedRecordInDataset(recordId);
+        if (match) {
+            this.assignedRecordSummary = {
+                recordId,
+                displayName: match.litify_pm__Display_Name__c || match.Name || 'Assigned Record',
+                status: match.Status || null
+            };
+            return;
+        }
+
+        const existingSummary = this.assignedRecordSummary;
+        try {
+            const summary = await getAssignedRecordSummary({ recordId });
+            if (summary) {
+                this.assignedRecordSummary = summary;
+            } else if (!existingSummary || existingSummary.recordId !== recordId) {
+                this.assignedRecordSummary = null;
+            }
+        } catch (error) {
+            console.error('Assigned record summary error:', error);
+            if (!existingSummary || existingSummary.recordId !== recordId) {
+                this.assignedRecordSummary = null;
+            }
         }
     }
     

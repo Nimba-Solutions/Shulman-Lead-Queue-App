@@ -63,7 +63,8 @@ private class LeadQueueServiceTest {
             litify_pm__Status__c = 'Questionnaire',
             Type__c = 'Worker Compensation',
             litify_pm__Phone__c = '555-999-0000',
-            litify_pm__Sign_Up_Method__c = 'E-Sign'
+            litify_pm__Sign_Up_Method__c = 'E-Sign',
+            Follow_Up_Date_Time__c = Datetime.now().addHours(-5)
         ));
         
         // Add test record for WC & PI type to test new priority order

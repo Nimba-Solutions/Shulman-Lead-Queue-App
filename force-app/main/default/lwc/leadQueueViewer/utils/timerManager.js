@@ -183,82 +183,57 @@ export class TimerManager {
      * Get assigned record info for tooltip
      */
     getAssignedRecordInfo() {
-        if (this.component.hasAssignments && this.component.records.length > 0) {
-            // Find record assigned to current user using safer ID matching
-            const assignedRecord = this.component.records.find(record => {
-                if (!record.assignedTo || !this.component.userAssignedRecordIds) {
-                    return false;
-                }
-                
-                // Try exact match first
-                if (this.component.userAssignedRecordIds.includes(record.Id)) {
-                    return true;
-                }
-                
-                // Try with -assigned suffix removed (fallback)
-                const originalRecordId = SharedUtils.normalizeRecordId(record.Id);
-                
-                return this.component.userAssignedRecordIds.includes(originalRecordId);
-            });
-            
-            return assignedRecord ? `Currently assigned: ${assignedRecord.litify_pm__Display_Name__c || assignedRecord.Name}` : 'Record assigned';
-        }
-        return '';
+        const assignedRecord = this.getAssignedRecordForCurrentUser();
+        return assignedRecord
+            ? `Currently assigned: ${assignedRecord.litify_pm__Display_Name__c || assignedRecord.Name}`
+            : '';
     }
 
     /**
      * Get assigned record display name for utility bar
      */
     getAssignedRecordDisplayName() {
-        if (this.component.hasAssignments && this.component.records.length > 0) {
-            // Find record assigned to current user using safer ID matching
-            const assignedRecord = this.component.records.find(record => {
-                if (!record.assignedTo || !this.component.userAssignedRecordIds) {
-                    return false;
-                }
-                
-                // Try exact match first
-                if (this.component.userAssignedRecordIds.includes(record.Id)) {
-                    return true;
-                }
-                
-                // Try with -assigned suffix removed (fallback)
-                const originalRecordId = SharedUtils.normalizeRecordId(record.Id);
-                
-                return this.component.userAssignedRecordIds.includes(originalRecordId);
-            });
-            
-            return assignedRecord ? (assignedRecord.litify_pm__Display_Name__c || assignedRecord.Name) : 'Assigned Record';
-        }
-        return '';
+        const assignedRecord = this.getAssignedRecordForCurrentUser();
+        return assignedRecord
+            ? (assignedRecord.litify_pm__Display_Name__c || assignedRecord.Name)
+            : 'Assigned Record';
     }
 
     /**
      * Get assigned record status for utility bar
      */
     getAssignedRecordStatus() {
-        if (this.component.hasAssignments && this.component.records.length > 0) {
-            // Find record assigned to current user using safer ID matching
-            const assignedRecord = this.component.records.find(record => {
-                if (!record.assignedTo || !this.component.userAssignedRecordIds) {
-                    return false;
-                }
-                
-                // Try exact match first
-                if (this.component.userAssignedRecordIds.includes(record.Id)) {
-                    return true;
-                }
-                
-                // Try with -assigned suffix removed (fallback)
-                const originalRecordId = SharedUtils.normalizeRecordId(record.Id);
-                
-                return this.component.userAssignedRecordIds.includes(originalRecordId);
-            });
-            
-            if (assignedRecord && assignedRecord.Status) {
-                return `Status: ${assignedRecord.Status}`;
-            }
+        const assignedRecord = this.getAssignedRecordForCurrentUser();
+        if (assignedRecord && assignedRecord.Status) {
+            return `Status: ${assignedRecord.Status}`;
         }
+        return null;
+    }
+
+    getAssignedRecordForCurrentUser() {
+        if (!this.component.hasAssignments || !this.component.userAssignedRecordIds || this.component.userAssignedRecordIds.length === 0) {
+            return null;
+        }
+
+        const assignedRecordId = this.component.userAssignedRecordIds[0];
+        const recordMatch = (this.component.records || []).find(record => {
+            const normalizedId = SharedUtils.normalizeRecordId(record.Id);
+            return normalizedId === assignedRecordId;
+        });
+
+        if (recordMatch) {
+            return recordMatch;
+        }
+
+        const summary = this.component.assignedRecordSummary;
+        if (summary && summary.recordId === assignedRecordId) {
+            return {
+                Name: summary.displayName || 'Assigned Record',
+                litify_pm__Display_Name__c: summary.displayName || 'Assigned Record',
+                Status: summary.status || null
+            };
+        }
+
         return null;
     }
 }

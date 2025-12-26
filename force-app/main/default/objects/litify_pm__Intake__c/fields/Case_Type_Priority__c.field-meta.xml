@@ -3,7 +3,6 @@
     <fullName>Case_Type_Priority__c</fullName>
     <externalId>false</externalId>
     <label>Case Type Priority</label>
-    <defaultValue>8</defaultValue>
     <precision>18</precision>
     <required>false</required>
     <scale>0</scale>
