@@ -61,7 +61,23 @@ public class LeadQueueConfig {
 
     // Use only explicit Case Type values; leave empty when not provided.
     public static String normalizeCaseType(String intakeType, String caseType) {
-        return String.isNotBlank(caseType) ? caseType : null;
+        if (String.isNotBlank(caseType)) {
+            return caseType;
+        }
+        if (String.isBlank(intakeType)) {
+            return null;
+        }
+        if (isCaseTypeParent(intakeType)) {
+            return null;
+        }
+        return CASE_TYPE_PRIORITY.containsKey(intakeType) ? intakeType : null;
+    }
+
+    private static Boolean isCaseTypeParent(String intakeType) {
+        return intakeType == 'Personal Injury'
+            || intakeType == 'WC & PI'
+            || intakeType == 'Civil Rights'
+            || intakeType == 'Other';
     }
 
     private static Map<String, Integer> buildStatusPriority() {
