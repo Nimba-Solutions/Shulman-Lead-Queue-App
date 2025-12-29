@@ -79,7 +79,7 @@ private class LeadQueueServiceTest {
         ));
         
         // Add test records for remaining case types to ensure complete coverage
-        // Note: Queue_Case_Type__c is set by triggers based on Type__c and Case_Type__c
+        // Note: Queue_Case_Type__c is set by triggers based on Case_Type__c
         testIntakes.add(new litify_pm__Intake__c(
             litify_pm__Status__c = 'Lead Generated',
             Type__c = 'Personal Injury',
@@ -497,7 +497,7 @@ private class LeadQueueServiceTest {
     }
 
     @IsTest
-    static void testTypeCaseTypeFallback() {
+    static void testTypeDoesNotFallbackToCaseType() {
         litify_pm__Intake__c veteranIntake = new litify_pm__Intake__c(
             litify_pm__Status__c = 'Lead Generated',
             Type__c = 'Veteran Disability',
@@ -515,12 +515,12 @@ private class LeadQueueServiceTest {
         for (LeadQueueService.QueueRecord record : response.records) {
             if (record.record.Id == veteranIntake.Id) {
                 containsVeteran = true;
-                Assert.areEqual('Veteran Disability', record.record.Queue_Case_Type__c,
-                    'Queue case type should fall back to Type__c when Case_Type__c is empty');
+                Assert.isTrue(String.isBlank(record.record.Queue_Case_Type__c),
+                    'Queue case type should be blank when Case_Type__c is empty');
                 break;
             }
         }
-        Assert.isTrue(containsVeteran, 'Queue should include records with Type__c-only case types');
+        Assert.isTrue(containsVeteran, 'Queue should include records even when Case_Type__c is empty');
     }
     
     @IsTest
