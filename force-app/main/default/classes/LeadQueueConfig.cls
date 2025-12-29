@@ -59,9 +59,15 @@ public class LeadQueueConfig {
         return calculatePriorityScore(status, casePriority);
     }
 
-    // Use only explicit Case Type values; leave empty when not provided.
+    // Mirror Case_Type_Reporting__c formula for queue-facing case type.
     public static String normalizeCaseType(String intakeType, String caseType) {
-        return String.isNotBlank(caseType) ? caseType : null;
+        if (intakeType == 'Personal Injury') {
+            return String.isNotBlank(caseType) ? caseType : intakeType;
+        }
+        if (intakeType == 'WC & PI') {
+            return String.isNotBlank(caseType) ? caseType : null;
+        }
+        return String.isNotBlank(intakeType) ? intakeType : null;
     }
 
     private static Map<String, Integer> buildStatusPriority() {

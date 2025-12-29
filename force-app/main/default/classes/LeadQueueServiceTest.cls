@@ -79,7 +79,7 @@ private class LeadQueueServiceTest {
         ));
         
         // Add test records for remaining case types to ensure complete coverage
-        // Note: Queue_Case_Type__c is set by triggers based on Case_Type__c
+        // Note: Queue_Case_Type__c is set by triggers based on Type__c + Case_Type__c (reporting formula)
         testIntakes.add(new litify_pm__Intake__c(
             litify_pm__Status__c = 'Lead Generated',
             Type__c = 'Personal Injury',
@@ -488,8 +488,8 @@ private class LeadQueueServiceTest {
         for (LeadQueueService.QueueRecord record : response.records) {
             if (record.record.Id == otherIntake.Id) {
                 containsOther = true;
-                Assert.isTrue(String.isBlank(record.record.Queue_Case_Type__c),
-                    'Queue case type should be blank when Case_Type__c is empty');
+                Assert.areEqual('Other', record.record.Queue_Case_Type__c,
+                    'Queue case type should use Type__c when Case_Type__c is empty');
                 break;
             }
         }
@@ -497,30 +497,31 @@ private class LeadQueueServiceTest {
     }
 
     @IsTest
-    static void testTypeDoesNotFallbackToCaseType() {
-        litify_pm__Intake__c veteranIntake = new litify_pm__Intake__c(
+    static void testPersonalInjuryFallbackUsesTypeWhenCaseTypeBlank() {
+        litify_pm__Intake__c personalInjuryIntake = new litify_pm__Intake__c(
             litify_pm__Status__c = 'Lead Generated',
-            Type__c = 'Veteran Disability',
-            litify_pm__Phone__c = '555-VET-TYPE',
+            Type__c = 'Personal Injury',
+            Case_Type__c = null,
+            litify_pm__Phone__c = '555-PI-TYPE',
             litify_pm__Sign_Up_Method__c = 'E-Sign',
             Follow_Up_Date_Time__c = Datetime.now().addHours(-1)
         );
-        insert veteranIntake;
+        insert personalInjuryIntake;
 
         Test.startTest();
         LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
         Test.stopTest();
 
-        Boolean containsVeteran = false;
+        Boolean containsPersonalInjury = false;
         for (LeadQueueService.QueueRecord record : response.records) {
-            if (record.record.Id == veteranIntake.Id) {
-                containsVeteran = true;
-                Assert.isTrue(String.isBlank(record.record.Queue_Case_Type__c),
-                    'Queue case type should be blank when Case_Type__c is empty');
+            if (record.record.Id == personalInjuryIntake.Id) {
+                containsPersonalInjury = true;
+                Assert.areEqual('Personal Injury', record.record.Queue_Case_Type__c,
+                    'Queue case type should use Type__c when Personal Injury has no Case_Type__c');
                 break;
             }
         }
-        Assert.isTrue(containsVeteran, 'Queue should include records even when Case_Type__c is empty');
+        Assert.isTrue(containsPersonalInjury, 'Queue should include Personal Injury records even when Case_Type__c is empty');
     }
     
     @IsTest
