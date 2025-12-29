@@ -1,7 +1,7 @@
 public class CustomIntakeTriggerHandler {
 
     public static void handleTrigger() {
-        System.debug('=== CUSTOM_TRIGGER_DEBUG: CustomIntakeTriggerHandler called - isBefore: ' + Trigger.isBefore + ', isAfter: ' + Trigger.isAfter + ', isUpdate: ' + Trigger.isUpdate + ' ===');
+        LeadQueueLogging.debug('=== CUSTOM_TRIGGER_DEBUG: CustomIntakeTriggerHandler called - isBefore: ' + Trigger.isBefore + ', isAfter: ' + Trigger.isAfter + ', isUpdate: ' + Trigger.isUpdate + ' ===');
         
         if (Trigger.isBefore) {
             if (Trigger.isInsert) {

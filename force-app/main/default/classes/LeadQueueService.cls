@@ -125,7 +125,7 @@ public with sharing class LeadQueueService {
         try {
             raw = (String) orgCache.get(cacheKey);
         } catch (Exception e) {
-            System.debug('LeadQueueService cache get error: ' + e.getMessage());
+            LeadQueueLogging.debug('LeadQueueService cache get error: ' + e.getMessage());
             return null;
         }
         if (String.isBlank(raw)) {
@@ -135,7 +135,7 @@ public with sharing class LeadQueueService {
             QueueResponseCache cached = (QueueResponseCache) JSON.deserialize(raw, QueueResponseCache.class);
             return cached != null ? cached.toResponse() : null;
         } catch (Exception e) {
-            System.debug('LeadQueueService cache deserialize error: ' + e.getMessage());
+            LeadQueueLogging.debug('LeadQueueService cache deserialize error: ' + e.getMessage());
             orgCache.remove(cacheKey);
             return null;
         }
@@ -153,7 +153,7 @@ public with sharing class LeadQueueService {
             QueueResponseCache cached = new QueueResponseCache().fromResponse(response);
             orgCache.put(cacheKey, JSON.serialize(cached), QUEUE_CACHE_TTL);
         } catch (Exception e) {
-            System.debug('LeadQueueService cache serialize error: ' + e.getMessage());
+            LeadQueueLogging.debug('LeadQueueService cache serialize error: ' + e.getMessage());
         }
     }
 
@@ -247,7 +247,7 @@ public with sharing class LeadQueueService {
             
             return new AssignmentResult(false, failureMessage != null ? failureMessage : 'No available records could be assigned');
         } catch (Exception e) {
-            System.debug('Assignment next error: ' + e.getMessage());
+            LeadQueueLogging.debug('Assignment next error: ' + e.getMessage());
             return new AssignmentResult(false, 'Assignment failed');
         }
     }
@@ -301,7 +301,7 @@ public with sharing class LeadQueueService {
             
             // If cache is unavailable, fail fast so users cannot take multiple records
             if (orgCache == null && !useSimulatedCache) {
-                System.debug('LeadQueueService.assignRecord: Platform Cache unavailable for user ' + userId + ' and record ' + recordId);
+                LeadQueueLogging.debug('LeadQueueService.assignRecord: Platform Cache unavailable for user ' + userId + ' and record ' + recordId);
                 return new AssignmentResult(false, 'Platform Cache not configured. Please contact your administrator.');
             }
             
@@ -341,7 +341,7 @@ public with sharing class LeadQueueService {
             return new AssignmentResult(true, 'Record assigned successfully');
             
         } catch (Exception e) {
-            System.debug('Assignment record error: ' + e.getMessage());
+            LeadQueueLogging.debug('Assignment record error: ' + e.getMessage());
             return new AssignmentResult(false, 'Assignment failed');
         }
     }
@@ -375,7 +375,7 @@ public with sharing class LeadQueueService {
             return true;
             
         } catch (Exception e) {
-            System.debug('Release assignments error: ' + e.getMessage());
+            LeadQueueLogging.debug('Release assignments error: ' + e.getMessage());
             throw new AuraHandledException('Error releasing assignments');
         }
     }
@@ -401,7 +401,7 @@ public with sharing class LeadQueueService {
             return result;
             
         } catch (Exception e) {
-            System.debug('User assignments error: ' + e.getMessage());
+            LeadQueueLogging.debug('User assignments error: ' + e.getMessage());
             return new Map<String, Long>();
         }
     }
@@ -434,7 +434,7 @@ public with sharing class LeadQueueService {
             summary.status = record.litify_pm__Status__c;
             return summary;
         } catch (Exception e) {
-            System.debug('getAssignedRecordSummary error: ' + e.getMessage());
+            LeadQueueLogging.debug('getAssignedRecordSummary error: ' + e.getMessage());
             return null;
         }
     }
@@ -452,7 +452,7 @@ public with sharing class LeadQueueService {
             Cache.OrgPartition orgCache = getCachePartition();
             Boolean useSimulatedCache = orgCache == null && isSimulatedCacheActive();
             if (orgCache == null && !useSimulatedCache) {
-                System.debug('LeadQueueService.autoReleaseRecords: Platform Cache unavailable - assignment tracking limited for ' + recordIds.size() + ' records');
+                LeadQueueLogging.debug('LeadQueueService.autoReleaseRecords: Platform Cache unavailable - assignment tracking limited for ' + recordIds.size() + ' records');
                 return;
             }
             
@@ -462,7 +462,7 @@ public with sharing class LeadQueueService {
                     simulatedAssignmentTimestamps.remove(recordId);
                     if (!String.isBlank(assignedUserId)) {
                         simulatedUserAssignments.remove(assignedUserId);
-                        System.debug('Auto-released record (simulated cache): ' + recordId + ' from user: ' + assignedUserId);
+                        LeadQueueLogging.debug('Auto-released record (simulated cache): ' + recordId + ' from user: ' + assignedUserId);
                     }
                 }
                 return;
@@ -477,7 +477,7 @@ public with sharing class LeadQueueService {
                         Map<String, Object> assignmentData = (Map<String, Object>) JSON.deserializeUntyped(assignmentJson);
                         assignedUserId = assignmentData != null ? (String) assignmentData.get('userId') : null;
                     } catch (Exception parseError) {
-                        System.debug('Auto-release parse error for record ' + recordId + ': ' + parseError.getMessage());
+                        LeadQueueLogging.debug('Auto-release parse error for record ' + recordId + ': ' + parseError.getMessage());
                     }
                 }
 
@@ -485,11 +485,11 @@ public with sharing class LeadQueueService {
                 
                 if (!String.isBlank(assignedUserId)) {
                     orgCache.remove(USER_CACHE_PREFIX + assignedUserId);
-                    System.debug('Auto-released record: ' + recordId + ' from user: ' + assignedUserId);
+                    LeadQueueLogging.debug('Auto-released record: ' + recordId + ' from user: ' + assignedUserId);
                 }
             }
         } catch (Exception e) {
-            System.debug('Auto-release error: ' + e.getMessage());
+            LeadQueueLogging.debug('Auto-release error: ' + e.getMessage());
         }
     }
     
@@ -701,7 +701,7 @@ public with sharing class LeadQueueService {
                     userIdToNameMap.put(user.Id, user.Name);
                 }
             } catch (Exception e) {
-                System.debug('Error querying users: ' + e.getMessage());
+                LeadQueueLogging.debug('Error querying users: ' + e.getMessage());
             }
         }
         
@@ -1016,7 +1016,7 @@ public with sharing class LeadQueueService {
             }
             return (Map<String, Object>) JSON.deserializeUntyped(assignmentJson);
         } catch (Exception e) {
-            System.debug('Error getting assignment data: ' + e.getMessage());
+            LeadQueueLogging.debug('Error getting assignment data: ' + e.getMessage());
             return null;
         }
     }
@@ -1029,7 +1029,7 @@ public with sharing class LeadQueueService {
             }
             return parseAssignmentTimestamp(assignmentData.get('assignedAt'));
         } catch (Exception e) {
-            System.debug('Error getting assignment timestamp: ' + e.getMessage());
+            LeadQueueLogging.debug('Error getting assignment timestamp: ' + e.getMessage());
             return null;
         }
     }
@@ -1045,7 +1045,7 @@ public with sharing class LeadQueueService {
             Decimal numericValue = Decimal.valueOf(String.valueOf(rawValue));
             return numericValue != null ? numericValue.longValue() : null;
         } catch (Exception parseError) {
-            System.debug('Assignment timestamp parse error: ' + parseError.getMessage());
+            LeadQueueLogging.debug('Assignment timestamp parse error: ' + parseError.getMessage());
             return null;
         }
     }
@@ -1054,12 +1054,12 @@ public with sharing class LeadQueueService {
         try {
             Cache.OrgPartition partition = Cache.Org.getPartition(CACHE_PARTITION);
             if (partition == null) {
-                System.debug('Cache partition not available for user: ' + UserInfo.getUserId());
+                LeadQueueLogging.debug('Cache partition not available for user: ' + UserInfo.getUserId());
                 return null;
             }
             return partition;
         } catch (Exception e) {
-            System.debug('Cache partition error for user ' + UserInfo.getUserId() + ': ' + e.getMessage());
+            LeadQueueLogging.debug('Cache partition error for user ' + UserInfo.getUserId() + ': ' + e.getMessage());
             return null;
         }
     }
