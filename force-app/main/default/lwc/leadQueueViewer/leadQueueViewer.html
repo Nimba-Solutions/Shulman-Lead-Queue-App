@@ -214,6 +214,23 @@
                         wrap-text-header="false">
                     </lightning-datatable>
                 </div>
+                <div class="pagination-bar">
+                    <lightning-button
+                        variant="neutral"
+                        label="Previous"
+                        onclick={handlePreviousPage}
+                        disabled={isPreviousPageDisabled}>
+                    </lightning-button>
+                    <div class="page-indicator">
+                        Page {currentPage} of {totalPages}
+                    </div>
+                    <lightning-button
+                        variant="neutral"
+                        label="Next"
+                        onclick={handleNextPage}
+                        disabled={isNextPageDisabled}>
+                    </lightning-button>
+                </div>
             </template>
             
             <template if:false={hasRecords}>

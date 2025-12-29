@@ -298,7 +298,7 @@ private class LeadQueueServiceTest {
         delete [SELECT Id FROM litify_pm__Intake__c];
         
         Test.startTest();
-        LeadQueueService.AssignmentResult result = LeadQueueService.assignNextAvailableRecord('', '', '', false);
+        LeadQueueService.AssignmentResult result = LeadQueueService.assignNextAvailableRecord('', '', '', false, null);
         Assert.isFalse(result.success, 'Assignment should fail when queue is empty');
         Assert.isTrue(result.message.contains('No available records'), 'Should indicate no records available');
         Test.stopTest();
@@ -317,7 +317,7 @@ private class LeadQueueServiceTest {
     @IsTest
     static void testAssignNextAvailableRecord() {
         Test.startTest();
-        LeadQueueService.AssignmentResult result = LeadQueueService.assignNextAvailableRecord('', '', '', false);
+        LeadQueueService.AssignmentResult result = LeadQueueService.assignNextAvailableRecord('', '', '', false, null);
         
         // With new filtering logic requiring Call_at_Date >= NOW, records may not be available in test context
         // since Call_at_Date is a formula field that may not be populated with future dates
@@ -331,7 +331,7 @@ private class LeadQueueServiceTest {
         }
         
         // Test scheduled calls assignment
-        LeadQueueService.AssignmentResult scheduledResult = LeadQueueService.assignNextAvailableRecord('', '', '', true);
+        LeadQueueService.AssignmentResult scheduledResult = LeadQueueService.assignNextAvailableRecord('', '', '', true, null);
         Assert.isNotNull(scheduledResult, 'Scheduled calls result should not be null');
         
         Test.stopTest();
@@ -824,7 +824,7 @@ private class LeadQueueServiceTest {
         Boolean releaseResult = LeadQueueService.releaseUserAssignments();
         
         // Test next available assignment workflow
-        LeadQueueService.AssignmentResult nextResult = LeadQueueService.assignNextAvailableRecord('', '', '', false);
+        LeadQueueService.AssignmentResult nextResult = LeadQueueService.assignNextAvailableRecord('', '', '', false, null);
         
         // Test queue data with various filter combinations
         LeadQueueService.getQueueData('Intake Scheduled', '', '', false);
@@ -1008,7 +1008,7 @@ private class LeadQueueServiceTest {
         LeadQueueService.QueueResponse resp3 = LeadQueueService.getQueueData('', '', 'nextWeek', false);
         
         // Test assignNextAvailableRecord
-        LeadQueueService.AssignmentResult nextAvail = LeadQueueService.assignNextAvailableRecord('', '', '', false);
+        LeadQueueService.AssignmentResult nextAvail = LeadQueueService.assignNextAvailableRecord('', '', '', false, null);
         
         Assert.isNotNull(assignedIds, 'Assigned IDs should not be null');
         Assert.isNotNull(releaseResult, 'Release result should not be null');  
@@ -1403,3 +1403,4 @@ private class LeadQueueServiceTest {
             && result.message.contains('Platform Cache not configured');
     }
 }
+

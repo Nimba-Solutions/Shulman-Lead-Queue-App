@@ -22,10 +22,15 @@ public with sharing class LeadQueueService {
     private static final Integer ASSIGNMENT_TTL = 1800; // 30 minutes
     private static final String CACHE_PARTITION = 'local.LeadQueueCache';
     private static final Integer HIGH_PRIORITY_THRESHOLD = 22;
+    private static final Integer DEFAULT_PAGE_SIZE = 50;
+    private static final Integer MAX_PAGE_SIZE = 200;
+    private static final Integer QUEUE_CACHE_TTL = 300; // Platform Cache minimum TTL is 300 seconds.
+    private static final String QUEUE_CACHE_PREFIX = 'queue';
     private static final String READY_TO_CALL_ORDER_BY = 'ORDER BY Priority_Score__c ASC, Call_at_Date__c ASC';
     private static final String SCHEDULED_CALL_ORDER_BY = 'ORDER BY Call_at_Date__c ASC';
-    private static final String REQUIRED_FIELDS = 'Id, Name, litify_pm__Display_Name__c, Referred_By_Name__c, litify_pm__Status__c, Priority_Score__c, CreatedDate, Queue_Case_Type__c, Type__c, Call_at_Date__c, litify_pm__Phone__c, litify_pm__Sign_Up_Method__c, Test_Record__c, Qualification_Status__c';
+    private static final String REQUIRED_FIELDS = 'Id, Name, litify_pm__Display_Name__c, Referred_By_Name__c, litify_pm__Status__c, Priority_Score__c, Queue_Case_Type__c, Call_at_Date__c, litify_pm__Phone__c, litify_pm__Sign_Up_Method__c, Test_Record__c, Qualification_Status__c';
     private static final Set<String> REQUIRED_FIELD_SET = buildRequiredFieldSet();
+    private static final Set<String> REQUIRED_ACCESS_FIELD_SET = buildRequiredAccessFieldSet();
     private static final String ASSIGNMENT_CACHE_PREFIX = 'assign';
     private static final String USER_CACHE_PREFIX = 'user';
 
@@ -69,6 +74,89 @@ public with sharing class LeadQueueService {
         return fields;
     }
 
+    private static Set<String> buildRequiredAccessFieldSet() {
+        Set<String> fields = new Set<String>();
+        fields.addAll(REQUIRED_FIELD_SET);
+        fields.add('Type__c');
+        return fields;
+    }
+
+    private static Integer normalizePageNumber(Integer pageNumber) {
+        return pageNumber != null && pageNumber > 0 ? pageNumber : 1;
+    }
+
+    private static Integer normalizePageSize(Integer pageSize) {
+        if (pageSize == null || pageSize <= 0) {
+            return DEFAULT_PAGE_SIZE;
+        }
+        return Math.min(pageSize, MAX_PAGE_SIZE);
+    }
+
+    private static String normalizeCacheToken(String value) {
+        return String.isBlank(value) ? '_' : value.trim();
+    }
+
+    private static String buildQueueCacheKey(String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls, Integer pageNumber, Integer pageSize, String tileFilter) {
+        List<String> parts = new List<String>{
+            QUEUE_CACHE_PREFIX,
+            UserInfo.getUserId(),
+            String.valueOf(showScheduledCalls),
+            String.valueOf(pageNumber),
+            String.valueOf(pageSize),
+            normalizeCacheToken(statusFilter),
+            normalizeCacheToken(caseTypeFilter),
+            normalizeCacheToken(dueDateFilter),
+            normalizeCacheToken(tileFilter)
+        };
+        String rawKey = String.join(parts, '|');
+        Blob digest = Crypto.generateDigest('SHA1', Blob.valueOf(rawKey));
+        return QUEUE_CACHE_PREFIX + EncodingUtil.convertToHex(digest);
+    }
+
+    private static QueueResponse getCachedQueueResponse(String cacheKey) {
+        if (Test.isRunningTest()) {
+            return null;
+        }
+        Cache.OrgPartition orgCache = getCachePartition();
+        if (orgCache == null) {
+            return null;
+        }
+        String raw;
+        try {
+            raw = (String) orgCache.get(cacheKey);
+        } catch (Exception e) {
+            System.debug('LeadQueueService cache get error: ' + e.getMessage());
+            return null;
+        }
+        if (String.isBlank(raw)) {
+            return null;
+        }
+        try {
+            QueueResponseCache cached = (QueueResponseCache) JSON.deserialize(raw, QueueResponseCache.class);
+            return cached != null ? cached.toResponse() : null;
+        } catch (Exception e) {
+            System.debug('LeadQueueService cache deserialize error: ' + e.getMessage());
+            orgCache.remove(cacheKey);
+            return null;
+        }
+    }
+
+    private static void cacheQueueResponse(String cacheKey, QueueResponse response) {
+        if (Test.isRunningTest()) {
+            return;
+        }
+        Cache.OrgPartition orgCache = getCachePartition();
+        if (orgCache == null || response == null) {
+            return;
+        }
+        try {
+            QueueResponseCache cached = new QueueResponseCache().fromResponse(response);
+            orgCache.put(cacheKey, JSON.serialize(cached), QUEUE_CACHE_TTL);
+        } catch (Exception e) {
+            System.debug('LeadQueueService cache serialize error: ' + e.getMessage());
+        }
+    }
+
     private static Set<String> buildScheduledCallStatuses() {
         Set<String> result = new Set<String>(STATUS_ORDER);
         result.remove('Referral Pending');
@@ -77,6 +165,11 @@ public with sharing class LeadQueueService {
     
     @AuraEnabled
     public static QueueResponse getQueueData(String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls) {
+        return getQueueDataPaged(statusFilter, caseTypeFilter, dueDateFilter, showScheduledCalls, null, null, null);
+    }
+
+    @AuraEnabled
+    public static QueueResponse getQueueDataPaged(String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls, Integer pageNumber, Integer pageSize, String tileFilter) {
         try {
             // Security validation
             if (!Schema.sObjectType.litify_pm__Intake__c.isAccessible()) {
@@ -91,17 +184,31 @@ public with sharing class LeadQueueService {
             }
             
             // Input validation with descriptive errors
-            ValidationResult validation = validateFilterInputs(statusFilter, caseTypeFilter, dueDateFilter, showScheduledCalls);
+            ValidationResult validation = validateFilterInputs(statusFilter, caseTypeFilter, dueDateFilter, showScheduledCalls, tileFilter);
             if (!validation.isValid) {
                 return new QueueResponse(validation.errorMessage);
             }
+
+            Integer safePageNumber = normalizePageNumber(pageNumber);
+            Integer safePageSize = normalizePageSize(pageSize);
+            Integer offset = (safePageNumber - 1) * safePageSize;
+            String cacheKey = buildQueueCacheKey(statusFilter, caseTypeFilter, dueDateFilter, showScheduledCalls, safePageNumber, safePageSize, tileFilter);
+            QueueResponse cached = getCachedQueueResponse(cacheKey);
+            if (cached != null) {
+                return cached;
+            }
             
             // Execute business logic
-            List<litify_pm__Intake__c> records = queryRecords(statusFilter, caseTypeFilter, dueDateFilter, showScheduledCalls);
+            List<litify_pm__Intake__c> records = queryRecords(statusFilter, caseTypeFilter, dueDateFilter, showScheduledCalls, tileFilter, safePageSize, offset);
             List<QueueRecord> queueRecords = processRecords(records, showScheduledCalls);
-            QueueStats stats = calculateStats(queueRecords);
+            QueueStats stats = calculateStatsForFilters(statusFilter, caseTypeFilter, dueDateFilter, showScheduledCalls);
+            Integer listTotalRecords = String.isNotBlank(tileFilter)
+                ? calculateListTotalRecords(statusFilter, caseTypeFilter, dueDateFilter, showScheduledCalls, tileFilter)
+                : stats.totalRecords;
             
-            return new QueueResponse(queueRecords, stats, getFilterOptions(showScheduledCalls), buildTileStatusGroups());
+            QueueResponse response = new QueueResponse(queueRecords, stats, getFilterOptions(showScheduledCalls), buildTileStatusGroups(), listTotalRecords);
+            cacheQueueResponse(cacheKey, response);
+            return response;
             
         } catch (Exception e) {
             // Fallback error handling for unexpected issues
@@ -111,10 +218,10 @@ public with sharing class LeadQueueService {
     }
     
     @AuraEnabled
-    public static AssignmentResult assignNextAvailableRecord(String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls) {
+    public static AssignmentResult assignNextAvailableRecord(String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls, String tileFilter) {
         try {
             // Query multiple records to handle assignment conflicts based on current view
-            List<litify_pm__Intake__c> records = getAvailableRecords(10, statusFilter, caseTypeFilter, dueDateFilter, showScheduledCalls);
+            List<litify_pm__Intake__c> records = getAvailableRecords(10, 0, statusFilter, caseTypeFilter, dueDateFilter, showScheduledCalls, tileFilter);
             String failureMessage = null;
             
             if (records.isEmpty()) {
@@ -406,6 +513,10 @@ public with sharing class LeadQueueService {
     }
     
     private static String buildBaseQuery(Boolean showScheduledCalls, Boolean allowFutureWindow) {
+        return 'SELECT ' + REQUIRED_FIELDS + ' FROM litify_pm__Intake__c WHERE ' + buildBaseWhereClause(showScheduledCalls, allowFutureWindow);
+    }
+
+    private static String buildBaseWhereClause(Boolean showScheduledCalls, Boolean allowFutureWindow) {
         String baseConditions = '(Test_Record__c = false OR Test_Record__c = null) AND (Type__c NOT IN :excludedTypes OR Type__c = null)';
         
         if (showScheduledCalls == true) {
@@ -416,43 +527,39 @@ public with sharing class LeadQueueService {
             String timeClause = allowFutureWindow
                 ? 'Call_at_Date__c >= :now AND Call_at_Date__c <= :twoWeeksFromNow'
                 : 'Call_at_Date__c >= :now';
-            String whereClause = baseConditions + ' AND ' + statusCondition + ' AND ' + timeClause;
-            return 'SELECT ' + REQUIRED_FIELDS + ' FROM litify_pm__Intake__c WHERE ' + whereClause;
-        } else {
-            if (allowFutureWindow) {
-                String readyStandardStatuses = buildStatusInClause(getReadyToCallStandardStatuses());
-                String futureCondition = '(' +
-                    '(litify_pm__Status__c IN ' + readyStandardStatuses + ')' +
-                    ' OR ' +
-                    '(litify_pm__Status__c = \'Questionnaire\')' +
-                    ' OR ' +
-                    '(litify_pm__Status__c = \'Intake Scheduled\')' +
-                ')';
-                
-                String whereClause = baseConditions + ' AND ' + futureCondition;
-                return 'SELECT ' + REQUIRED_FIELDS + ' FROM litify_pm__Intake__c WHERE ' + whereClause;
-            }
-            
-            // Ready to call: different time criteria per status
-            String readyStandardStatuses = buildStatusInClause(getReadyToCallStandardStatuses());
-            String complexCondition = '(' +
-                // Standard statuses: show if Call_at_Date__c <= now
-                '(litify_pm__Status__c IN ' + readyStandardStatuses + ' AND Call_at_Date__c <= :now)' +
-                ' OR ' +
-                // Questionnaire: show only if Call_at_Date__c <= 4 hours ago (exclude recent)
-                '(litify_pm__Status__c = \'Questionnaire\' AND Call_at_Date__c <= :fourHoursAgo)' +
-                ' OR ' +
-                // Intake Scheduled: show if Call_at_Date__c <= now (no 4-hour restriction)
-                '(litify_pm__Status__c = \'Intake Scheduled\' AND (' +
-                    '(litify_pm__Sign_Up_Method__c = \'E-Sign\' AND Call_at_Date__c <= :now)' +
-                    ' OR ' +
-                    '(litify_pm__Sign_Up_Method__c = \'Office\' AND Call_at_Date__c <= :now)' +
-                '))' +
-                ')';
-            
-            String whereClause = baseConditions + ' AND ' + complexCondition;
-            return 'SELECT ' + REQUIRED_FIELDS + ' FROM litify_pm__Intake__c WHERE ' + whereClause;
+            return baseConditions + ' AND ' + statusCondition + ' AND ' + timeClause;
         }
+        if (allowFutureWindow) {
+            String readyStandardStatuses = buildStatusInClause(getReadyToCallStandardStatuses());
+            String futureCondition = '(' +
+                '(litify_pm__Status__c IN ' + readyStandardStatuses + ')' +
+                ' OR ' +
+                '(litify_pm__Status__c = \'Questionnaire\')' +
+                ' OR ' +
+                '(litify_pm__Status__c = \'Intake Scheduled\')' +
+            ')';
+            
+            return baseConditions + ' AND ' + futureCondition;
+        }
+        
+        // Ready to call: different time criteria per status
+        String readyStandardStatuses = buildStatusInClause(getReadyToCallStandardStatuses());
+        String complexCondition = '(' +
+            // Standard statuses: show if Call_at_Date__c <= now
+            '(litify_pm__Status__c IN ' + readyStandardStatuses + ' AND Call_at_Date__c <= :now)' +
+            ' OR ' +
+            // Questionnaire: show only if Call_at_Date__c <= 4 hours ago (exclude recent)
+            '(litify_pm__Status__c = \'Questionnaire\' AND Call_at_Date__c <= :fourHoursAgo)' +
+            ' OR ' +
+            // Intake Scheduled: show if Call_at_Date__c <= now (no 4-hour restriction)
+            '(litify_pm__Status__c = \'Intake Scheduled\' AND (' +
+                '(litify_pm__Sign_Up_Method__c = \'E-Sign\' AND Call_at_Date__c <= :now)' +
+                ' OR ' +
+                '(litify_pm__Sign_Up_Method__c = \'Office\' AND Call_at_Date__c <= :now)' +
+            '))' +
+            ')';
+        
+        return baseConditions + ' AND ' + complexCondition;
     }
 
     private static String buildStatusInClause(List<String> statuses) {
@@ -491,8 +598,34 @@ public with sharing class LeadQueueService {
     private static Set<String> getAllQueueStatuses() {
         return ALL_QUEUE_STATUSES;
     }
+
+    private static List<String> buildFilterConditions(String statusFilter, String caseTypeFilter, String dueDateFilter, String tileFilter, Map<String, Object> bindVars) {
+        List<String> conditions = new List<String>();
+        if (String.isNotBlank(statusFilter)) {
+            conditions.add('litify_pm__Status__c = :statusFilter');
+            bindVars.put('statusFilter', statusFilter);
+        }
+        if (String.isNotBlank(caseTypeFilter)) {
+            conditions.add('Queue_Case_Type__c = :caseTypeFilter');
+            bindVars.put('caseTypeFilter', caseTypeFilter);
+        }
+        if (String.isNotBlank(tileFilter)) {
+            Set<String> tileStatuses = TILE_STATUS_GROUPS.get(tileFilter);
+            if (tileStatuses != null && !tileStatuses.isEmpty()) {
+                conditions.add('litify_pm__Status__c IN :tileStatuses');
+                bindVars.put('tileStatuses', new List<String>(tileStatuses));
+            }
+        }
+        if (String.isNotBlank(dueDateFilter)) {
+            String dateCondition = getDateCondition(dueDateFilter);
+            if (dateCondition != null) {
+                conditions.add(dateCondition);
+            }
+        }
+        return conditions;
+    }
     
-    private static List<litify_pm__Intake__c> getAvailableRecords(Integer limitCount, String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls) {
+    private static List<litify_pm__Intake__c> getAvailableRecords(Integer limitCount, Integer offset, String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls, String tileFilter) {
         Boolean allowFutureWindow = 'nextWeek'.equalsIgnoreCase(dueDateFilter);
         String query = buildBaseQuery(showScheduledCalls, allowFutureWindow);
         
@@ -504,25 +637,7 @@ public with sharing class LeadQueueService {
         bindVars.put('fourHoursAgo', nowValue.addHours(-4));
         bindVars.put('twoWeeksFromNow', nowValue.addDays(14));
         bindVars.put('excludedTypes', EXCLUDED_INTAKE_TYPES);
-        
-        List<String> conditions = new List<String>();
-        
-        if (String.isNotBlank(statusFilter)) {
-            conditions.add('litify_pm__Status__c = :statusFilter');
-            bindVars.put('statusFilter', statusFilter);
-        }
-        
-        if (String.isNotBlank(caseTypeFilter)) {
-            conditions.add('Queue_Case_Type__c = :caseTypeFilter');
-            bindVars.put('caseTypeFilter', caseTypeFilter);
-        }
-        
-        if (String.isNotBlank(dueDateFilter)) {
-            String dateCondition = getDateCondition(dueDateFilter);
-            if (dateCondition != null) {
-                conditions.add(dateCondition);
-            }
-        }
+        List<String> conditions = buildFilterConditions(statusFilter, caseTypeFilter, dueDateFilter, tileFilter, bindVars);
         
         if (conditions.size() > 0) {
             query += ' AND ' + String.join(conditions, ' AND ');
@@ -532,12 +647,15 @@ public with sharing class LeadQueueService {
         if (limitCount != null) {
             query += ' LIMIT ' + limitCount;
         }
+        if (offset != null && offset > 0) {
+            query += ' OFFSET ' + offset;
+        }
         
         return Database.queryWithBinds(query, bindVars, AccessLevel.USER_MODE);
     }
     
-    private static List<litify_pm__Intake__c> queryRecords(String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls) {
-        return getAvailableRecords(1000, statusFilter, caseTypeFilter, dueDateFilter, showScheduledCalls);
+    private static List<litify_pm__Intake__c> queryRecords(String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls, String tileFilter, Integer limitCount, Integer offset) {
+        return getAvailableRecords(limitCount, offset, statusFilter, caseTypeFilter, dueDateFilter, showScheduledCalls, tileFilter);
     }
     
     private static List<QueueRecord> processRecords(List<litify_pm__Intake__c> records, Boolean showScheduledCalls) {
@@ -649,7 +767,15 @@ public with sharing class LeadQueueService {
         QueueRecord qr = new QueueRecord();
         String assignedUserId = assignedUserByRecord.get(record.Id);
         qr.record = record;
-        qr.priorityScore = record.Priority_Score__c != null ? Integer.valueOf(record.Priority_Score__c) : 99;
+        qr.recordId = String.valueOf(record.Id);
+        qr.displayName = record.litify_pm__Display_Name__c;
+        qr.referredByName = record.Referred_By_Name__c;
+        qr.status = record.litify_pm__Status__c;
+        qr.caseType = record.Queue_Case_Type__c;
+        qr.qualificationStatus = record.Qualification_Status__c;
+        qr.callAtDate = record.Call_at_Date__c;
+        qr.phone = record.litify_pm__Phone__c;
+        qr.priorityScore = record.Priority_Score__c != null ? record.Priority_Score__c.intValue() : 99;
         qr.isHighPriority = qr.priorityScore <= HIGH_PRIORITY_THRESHOLD;
         qr.isDueToday = isDueToday(record.Call_at_Date__c);
         qr.isOverdue = isOverdue(record.Call_at_Date__c);
@@ -693,6 +819,77 @@ public with sharing class LeadQueueService {
         }
         
         return stats;
+    }
+
+    private static QueueStats calculateStatsForFilters(String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls) {
+        QueueStats stats = new QueueStats();
+        Boolean allowFutureWindow = 'nextWeek'.equalsIgnoreCase(dueDateFilter);
+        String whereClause = buildBaseWhereClause(showScheduledCalls, allowFutureWindow);
+
+        Map<String, Object> bindVars = new Map<String, Object>();
+        Datetime nowValue = Datetime.now();
+        bindVars.put('now', nowValue);
+        bindVars.put('twoHoursFromNow', nowValue.addHours(2));
+        bindVars.put('fourHoursAgo', nowValue.addHours(-4));
+        bindVars.put('twoWeeksFromNow', nowValue.addDays(14));
+        bindVars.put('excludedTypes', EXCLUDED_INTAKE_TYPES);
+
+        List<String> conditions = buildFilterConditions(statusFilter, caseTypeFilter, dueDateFilter, null, bindVars);
+        if (!conditions.isEmpty()) {
+            whereClause += ' AND ' + String.join(conditions, ' AND ');
+        }
+
+        String query = 'SELECT litify_pm__Status__c status, COUNT(Id) total FROM litify_pm__Intake__c WHERE ' +
+            whereClause + ' GROUP BY litify_pm__Status__c';
+        List<AggregateResult> results = Database.queryWithBinds(query, bindVars, AccessLevel.USER_MODE);
+        Integer total = 0;
+        for (AggregateResult result : results) {
+            String status = (String) result.get('status');
+            Integer count = Integer.valueOf(String.valueOf(result.get('total')));
+            total += count;
+            if (isStatusInGroup('highPriority', status)) {
+                stats.highPriorityCount += count;
+            }
+            if (isStatusInGroup('inContact', status)) {
+                stats.inContactCount += count;
+            }
+            if (isStatusInGroup('noContact', status)) {
+                stats.noContactCount += count;
+            }
+            if (isStatusInGroup('retainerSent', status)) {
+                stats.retainerSentCount += count;
+            }
+            if (isStatusInGroup('referrals', status)) {
+                stats.referralCount += count;
+            }
+        }
+        stats.totalRecords = total;
+        return stats;
+    }
+
+    private static Integer calculateListTotalRecords(String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls, String tileFilter) {
+        Boolean allowFutureWindow = 'nextWeek'.equalsIgnoreCase(dueDateFilter);
+        String whereClause = buildBaseWhereClause(showScheduledCalls, allowFutureWindow);
+
+        Map<String, Object> bindVars = new Map<String, Object>();
+        Datetime nowValue = Datetime.now();
+        bindVars.put('now', nowValue);
+        bindVars.put('twoHoursFromNow', nowValue.addHours(2));
+        bindVars.put('fourHoursAgo', nowValue.addHours(-4));
+        bindVars.put('twoWeeksFromNow', nowValue.addDays(14));
+        bindVars.put('excludedTypes', EXCLUDED_INTAKE_TYPES);
+
+        List<String> conditions = buildFilterConditions(statusFilter, caseTypeFilter, dueDateFilter, tileFilter, bindVars);
+        if (!conditions.isEmpty()) {
+            whereClause += ' AND ' + String.join(conditions, ' AND ');
+        }
+
+        String query = 'SELECT COUNT(Id) total FROM litify_pm__Intake__c WHERE ' + whereClause;
+        List<AggregateResult> results = Database.queryWithBinds(query, bindVars, AccessLevel.USER_MODE);
+        if (!results.isEmpty()) {
+            return Integer.valueOf(String.valueOf(results[0].get('total')));
+        }
+        return 0;
     }
 
     private static Boolean isStatusInGroup(String groupKey, String status) {
@@ -872,7 +1069,7 @@ public with sharing class LeadQueueService {
         Map<String, Schema.SObjectField> fieldMap = Schema.sObjectType.litify_pm__Intake__c.fields.getMap();
         List<String> missingFields = new List<String>();
         
-        for (String fieldName : REQUIRED_FIELD_SET) {
+        for (String fieldName : REQUIRED_ACCESS_FIELD_SET) {
             if (!fieldMap.containsKey(fieldName) || !fieldMap.get(fieldName).getDescribe().isAccessible()) {
                 missingFields.add(fieldName);
             }
@@ -898,14 +1095,16 @@ public with sharing class LeadQueueService {
         @AuraEnabled public QueueStats stats { get; set; }
         @AuraEnabled public FilterOptions filters { get; set; }
         @AuraEnabled public Map<String, List<String>> tileStatusGroups { get; set; }
+        @AuraEnabled public Integer listTotalRecords { get; set; }
         
         // Success constructor
-        public QueueResponse(List<QueueRecord> records, QueueStats stats, FilterOptions filters, Map<String, List<String>> tileStatusGroups) {
+        public QueueResponse(List<QueueRecord> records, QueueStats stats, FilterOptions filters, Map<String, List<String>> tileStatusGroups, Integer listTotalRecords) {
             this.success = true;
             this.records = records;
             this.stats = stats;
             this.filters = filters;
             this.tileStatusGroups = tileStatusGroups;
+            this.listTotalRecords = listTotalRecords != null ? listTotalRecords : 0;
         }
         
         // Error constructor
@@ -916,11 +1115,125 @@ public with sharing class LeadQueueService {
             this.stats = new QueueStats();
             this.filters = new FilterOptions();
             this.tileStatusGroups = new Map<String, List<String>>();
+            this.listTotalRecords = 0;
+        }
+    }
+
+    public class QueueResponseCache {
+        public List<QueueRecordCache> records { get; set; }
+        public QueueStats stats { get; set; }
+        public FilterOptions filters { get; set; }
+        public Map<String, List<String>> tileStatusGroups { get; set; }
+        public Integer listTotalRecords { get; set; }
+
+        public QueueResponseCache fromResponse(QueueResponse response) {
+            this.records = new List<QueueRecordCache>();
+            this.stats = response.stats;
+            this.filters = response.filters;
+            this.tileStatusGroups = response.tileStatusGroups;
+            this.listTotalRecords = response.listTotalRecords;
+            if (response.records != null) {
+                for (QueueRecord record : response.records) {
+                    QueueRecordCache cachedRecord = new QueueRecordCache().fromRecord(record);
+                    if (cachedRecord != null) {
+                        this.records.add(cachedRecord);
+                    }
+                }
+            }
+            return this;
+        }
+
+        public QueueResponse toResponse() {
+            List<QueueRecord> restored = new List<QueueRecord>();
+            if (records != null) {
+                for (QueueRecordCache cached : records) {
+                    QueueRecord record = cached.toRecord();
+                    if (record != null) {
+                        restored.add(record);
+                    }
+                }
+            }
+            return new QueueResponse(restored, stats, filters, tileStatusGroups, listTotalRecords);
+        }
+    }
+
+    public class QueueRecordCache {
+        public String recordId { get; set; }
+        public String displayName { get; set; }
+        public String referredByName { get; set; }
+        public String status { get; set; }
+        public String caseType { get; set; }
+        public String qualificationStatus { get; set; }
+        public Datetime callAtDate { get; set; }
+        public String phone { get; set; }
+        public Integer priorityScore { get; set; }
+        public Boolean isHighPriority { get; set; }
+        public Boolean isDueToday { get; set; }
+        public Boolean isOverdue { get; set; }
+        public Boolean isAssigned { get; set; }
+        public String assignedTo { get; set; }
+        public Long assignedTimestamp { get; set; }
+
+        public QueueRecordCache fromRecord(QueueRecord record) {
+            if (record == null || record.record == null) {
+                return null;
+            }
+            this.recordId = String.valueOf(record.record.Id);
+            this.displayName = record.displayName != null ? record.displayName : record.record.litify_pm__Display_Name__c;
+            this.referredByName = record.referredByName != null ? record.referredByName : record.record.Referred_By_Name__c;
+            this.status = record.status != null ? record.status : record.record.litify_pm__Status__c;
+            this.caseType = record.caseType != null ? record.caseType : record.record.Queue_Case_Type__c;
+            this.qualificationStatus = record.qualificationStatus != null ? record.qualificationStatus : record.record.Qualification_Status__c;
+            this.callAtDate = record.callAtDate != null ? record.callAtDate : record.record.Call_at_Date__c;
+            this.phone = record.phone != null ? record.phone : record.record.litify_pm__Phone__c;
+            this.priorityScore = record.priorityScore;
+            this.isHighPriority = record.isHighPriority;
+            this.isDueToday = record.isDueToday;
+            this.isOverdue = record.isOverdue;
+            this.isAssigned = record.isAssigned;
+            this.assignedTo = record.assignedTo;
+            this.assignedTimestamp = record.assignedTimestamp;
+            return this;
+        }
+
+        public QueueRecord toRecord() {
+            if (String.isBlank(recordId)) {
+                return null;
+            }
+            litify_pm__Intake__c restored = new litify_pm__Intake__c();
+            restored.Id = (Id) recordId;
+
+            QueueRecord record = new QueueRecord();
+            record.record = restored;
+            record.recordId = recordId;
+            record.displayName = displayName;
+            record.referredByName = referredByName;
+            record.status = status;
+            record.caseType = caseType;
+            record.qualificationStatus = qualificationStatus;
+            record.callAtDate = callAtDate;
+            record.phone = phone;
+            record.priorityScore = priorityScore;
+            record.isHighPriority = isHighPriority;
+            record.isDueToday = isDueToday;
+            record.isOverdue = isOverdue;
+            record.isAssigned = isAssigned != null ? isAssigned : String.isNotBlank(assignedTo);
+            record.assignedTo = assignedTo;
+            record.assignedTimestamp = assignedTimestamp;
+            return record;
         }
     }
     
     public class QueueRecord {
         @AuraEnabled public litify_pm__Intake__c record { get; set; }
+        @AuraEnabled public String recordId { get; set; }
+        @AuraEnabled public String displayName { get; set; }
+        @AuraEnabled public String referredByName { get; set; }
+        @AuraEnabled public String status { get; set; }
+        @AuraEnabled public String caseType { get; set; }
+        @AuraEnabled public String qualificationStatus { get; set; }
+        @AuraEnabled public Datetime callAtDate { get; set; }
+        @AuraEnabled public String phone { get; set; }
         @AuraEnabled public Integer priorityScore { get; set; }
         @AuraEnabled public Boolean isHighPriority { get; set; }
         @AuraEnabled public Boolean isDueToday { get; set; }
@@ -991,13 +1304,16 @@ public with sharing class LeadQueueService {
         }
     }
     
-    private static ValidationResult validateFilterInputs(String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls) {
+    private static ValidationResult validateFilterInputs(String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls, String tileFilter) {
         if (String.isNotBlank(statusFilter) && !getStatusesForView(showScheduledCalls).contains(statusFilter)) {
             List<String> validStatuses = getStatusListForMessage(showScheduledCalls);
             return new ValidationResult(false, 'Invalid status filter: ' + statusFilter + '. Valid options: ' + String.join(validStatuses, ', '));
         }
         if (String.isNotBlank(caseTypeFilter) && !LeadQueueConfig.CASE_TYPE_PRIORITY.containsKey(caseTypeFilter)) {
             return new ValidationResult(false, 'Invalid case type filter: ' + caseTypeFilter + '. Valid options: ' + String.join(getOrderedCaseTypes(), ', '));
+        }
+        if (String.isNotBlank(tileFilter) && !TILE_STATUS_GROUPS.containsKey(tileFilter)) {
+            return new ValidationResult(false, 'Invalid tile filter: ' + tileFilter);
         }
         if (String.isNotBlank(dueDateFilter) && !isValidDateFilter(dueDateFilter)) {
             return new ValidationResult(false, 'Invalid date filter: ' + dueDateFilter + '. Valid options: today, thisWeek, nextWeek');

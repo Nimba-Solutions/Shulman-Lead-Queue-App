@@ -4,7 +4,7 @@ import { NavigationMixin } from 'lightning/navigation';
 import { IsConsoleNavigation } from 'lightning/platformWorkspaceApi';
 // Removed refreshApex import - pure LWC approach without Aura compatibility layer
 import Id from '@salesforce/user/Id';
-import getQueueData from '@salesforce/apex/LeadQueueService.getQueueData';
+import getQueueDataPaged from '@salesforce/apex/LeadQueueService.getQueueDataPaged';
 import assignRecord from '@salesforce/apex/LeadQueueService.assignRecord';
 import assignNextAvailableRecord from '@salesforce/apex/LeadQueueService.assignNextAvailableRecord';
 import releaseUserAssignments from '@salesforce/apex/LeadQueueService.releaseUserAssignments';
@@ -58,6 +58,9 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     @track isLoadingState = false;
     @track isCacheReady = true;
     hasShownCacheWarning = false;
+    currentPage = 1;
+    pageSize = 50;
+    listTotalRecords = 0;
     
     refreshInterval;
     timerInterval;
@@ -88,11 +91,14 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
             this.isLoadingState = true;
         }
         try {
-            const result = await getQueueData({ 
+            const result = await getQueueDataPaged({ 
                 statusFilter: this.statusFilter, 
                 caseTypeFilter: this.caseTypeFilter, 
                 dueDateFilter: this.dueDateFilter,
-                showScheduledCalls: this.showScheduledCalls
+                showScheduledCalls: this.showScheduledCalls,
+                pageNumber: this.currentPage,
+                pageSize: this.pageSize,
+                tileFilter: this.activeTileFilter
             });
             
             // Only process if this is still the most recent request
@@ -100,6 +106,11 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
                 if (result && result.success) {
                     this.processQueueResponse(result);
                     this.updateAssignedRecordSummaryFromDataset();
+                    if (this.currentPage > this.totalPages) {
+                        this.currentPage = this.totalPages;
+                        this.loadQueueData({ useSoftRefresh: true });
+                        return;
+                    }
                     this.hasInitialLoadCompleted = true;
                     this.isAutoClearingInvalidStatus = false;
                 } else {
@@ -125,6 +136,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
                 this.queueStats = SharedUtils.getDefaultStats();
                 this.filterOptions = { statusOptions: [], caseTypeOptions: [] };
                 this.tileStatusGroups = {};
+                this.listTotalRecords = 0;
                 
                 // Preserve user selections: statusFilter, caseTypeFilter, dueDateFilter, activeTileFilter remain intact
                 // Only clear operational state, not user preferences
@@ -253,6 +265,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         this.queueStats = SharedUtils.getDefaultStats();
         this.filterOptions = { statusOptions: [], caseTypeOptions: [] };
         this.tileStatusGroups = {};
+        this.listTotalRecords = 0;
         
         // Reset operational flags
         this.hasAssignments = false;
@@ -304,7 +317,8 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
                 statusFilter: this.statusFilter,
                 caseTypeFilter: this.caseTypeFilter,
                 dueDateFilter: this.dueDateFilter,
-                showScheduledCalls: this.showScheduledCalls
+                showScheduledCalls: this.showScheduledCalls,
+                tileFilter: this.activeTileFilter
             });
             
             if (result.success) {
@@ -518,6 +532,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     handleFilterChange(event) {
         const filterName = event.target.name;
         const filterValue = event.detail.value;
+        this.currentPage = 1;
         
         // Increment request ID to invalidate previous responses
         this.filterRequestId++;
@@ -579,6 +594,20 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     handleClearFilters() {
         if (this.dataProcessor) {
             this.dataProcessor.clearFilters();
+        }
+    }
+
+    handlePreviousPage() {
+        if (this.currentPage > 1) {
+            this.currentPage--;
+            this.loadQueueData({ useSoftRefresh: true });
+        }
+    }
+
+    handleNextPage() {
+        if (this.currentPage < this.totalPages) {
+            this.currentPage++;
+            this.loadQueueData({ useSoftRefresh: true });
         }
     }
     
@@ -655,6 +684,22 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     
     get areRowActionsDisabled() {
         return this.isLoading || this.isAssigning || this.isReleasing;
+    }
+
+    get totalPages() {
+        const totalRecords = this.listTotalRecords != null
+            ? this.listTotalRecords
+            : (this.originalStats?.totalRecords || 0);
+        const pages = Math.ceil(totalRecords / this.pageSize);
+        return pages > 0 ? pages : 1;
+    }
+
+    get isPreviousPageDisabled() {
+        return this.isLoading || this.currentPage <= 1;
+    }
+
+    get isNextPageDisabled() {
+        return this.isLoading || this.currentPage >= this.totalPages;
     }
     
     get assignButtonLabel() {
@@ -737,6 +782,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     showReadyToCalls() {
         if (this.showScheduledCalls) {
             this.showScheduledCalls = false;
+            this.currentPage = 1;
             this.activeTileFilter = null;
             if (this.dataProcessor) {
                 this.dataProcessor.updateTileVisualState();
@@ -749,6 +795,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     showScheduledCallsView() {
         if (!this.showScheduledCalls) {
             this.showScheduledCalls = true;
+            this.currentPage = 1;
             this.activeTileFilter = null;
             if (this.dataProcessor) {
                 this.dataProcessor.updateTileVisualState();
