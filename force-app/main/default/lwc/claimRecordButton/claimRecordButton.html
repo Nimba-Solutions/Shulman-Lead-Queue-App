@@ -1,13 +1,13 @@
 <template>
-    <lightning-card title="Lead Queue Assignment">
-        <div class="slds-p-horizontal_small">
+    <lightning-card title="Lead Queue Assignment" class="slds-var-m-bottom_medium">
+        <div class="slds-var-p-horizontal_small slds-grid slds-grid_vertical slds-grid_vertical-align-center slds-text-align_center">
             <template if:true={showCacheWarning}>
-                <div class="cache-warning" role="alert">
-                    <lightning-icon icon-name="utility:warning" alternative-text="Cache warning" size="small" class="cache-warning-icon"></lightning-icon>
-                    <div class="cache-warning-content">
+                <div class="cache-warning slds-grid slds-grid_vertical-align-center slds-gutters_x-small slds-var-p-around_small slds-var-m-bottom_small" role="alert">
+                    <lightning-icon icon-name="utility:warning" alternative-text="Cache warning" size="small" class="cache-warning-icon slds-col slds-no-flex"></lightning-icon>
+                    <div class="cache-warning-content slds-col slds-grow slds-text-body_regular">
                         <strong>Platform Cache unavailable.</strong> Assignments are paused until the cache partition is configured.
                     </div>
-                    <div class="cache-warning-actions">
+                    <div class="cache-warning-actions slds-col slds-no-flex">
                         <lightning-button variant="base" label="Open Setup" onclick={openCacheSetup}></lightning-button>
                     </div>
                 </div>
@@ -21,7 +21,7 @@
                     icon-name="utility:user"
                     onclick={handleClaimRecord}
                     disabled={isClaimButtonDisabled}
-                    class="claim-button">
+                    class="action-button slds-size_1-of-1 slds-var-m-bottom_x-small">
                 </lightning-button>
             </template>
             
@@ -33,22 +33,22 @@
                     icon-name="utility:unlock"
                     onclick={handleReleaseRecord}
                     disabled={isReleaseButtonDisabled}
-                    class="claim-button release-button">
+                    class="action-button slds-size_1-of-1 slds-var-m-bottom_x-small">
                 </lightning-button>
             </template>
 
             <!-- Show warning when user has DIFFERENT record claimed -->
             <template if:true={hasOtherRecordClaimed}>
-                <div class="other-record-claimed">
-                    <lightning-icon icon-name="utility:warning" size="small" variant="warning"></lightning-icon>
-                    <div class="warning-text">
+                <div class="other-record-claimed slds-grid slds-grid_align-center slds-grid_vertical-align-center slds-gutters_x-small slds-var-p-around_small slds-var-m-bottom_x-small">
+                    <lightning-icon icon-name="utility:warning" size="small" variant="warning" class="slds-col slds-no-flex"></lightning-icon>
+                    <div class="warning-text slds-col slds-text-body_regular slds-text-align_center">
                         You already have an Intake claimed. Please release the record first before claiming a new one.
                     </div>
                 </div>
             </template>
             
             <template if:true={showSuccess}>
-                <div class="slds-text-color_success slds-m-top_x-small">
+                <div class="slds-text-color_success slds-var-m-top_x-small slds-text-body_regular status-message">
                     <template if:true={isCurrentRecordClaimed}>
                         Record claimed successfully!
                     </template>
