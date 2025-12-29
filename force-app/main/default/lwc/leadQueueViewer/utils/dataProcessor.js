@@ -239,16 +239,20 @@ export class DataProcessor {
             {
                 type: 'action',
                 typeAttributes: {
-                    rowActions: this.getRowActions()
+                    rowActions: this.getRowActions.bind(this)
                 }
             }
         ];
     }
 
-    getRowActions() {
-        return [
-            { label: 'Assign to Me', name: 'assign', iconName: 'utility:user' },
+    getRowActions(row, doneCallback) {
+        const actions = [
             { label: 'Open Record', name: 'open', iconName: 'utility:open' }
         ];
+        const canAssign = this.component.isCacheReady && !this.component.areRowActionsDisabled;
+        if (canAssign) {
+            actions.unshift({ label: 'Assign to Me', name: 'assign', iconName: 'utility:user' });
+        }
+        doneCallback(actions);
     }
 }

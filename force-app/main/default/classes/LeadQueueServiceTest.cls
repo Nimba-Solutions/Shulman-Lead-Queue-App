@@ -523,6 +523,51 @@ private class LeadQueueServiceTest {
         }
         Assert.isTrue(containsPersonalInjury, 'Queue should include Personal Injury records even when Case_Type__c is empty');
     }
+
+    @IsTest
+    static void testQueueCaseTypeMatchesReportingFormula() {
+        List<litify_pm__Intake__c> testRecords = new List<litify_pm__Intake__c>{
+            new litify_pm__Intake__c(
+                litify_pm__Status__c = 'Lead Generated',
+                Type__c = 'Personal Injury',
+                Case_Type__c = null,
+                litify_pm__Phone__c = '555-CT-MATCH-1',
+                litify_pm__Sign_Up_Method__c = 'E-Sign'
+            ),
+            new litify_pm__Intake__c(
+                litify_pm__Status__c = 'Lead Generated',
+                Type__c = 'Personal Injury',
+                Case_Type__c = 'MVA',
+                litify_pm__Phone__c = '555-CT-MATCH-2',
+                litify_pm__Sign_Up_Method__c = 'E-Sign'
+            ),
+            new litify_pm__Intake__c(
+                litify_pm__Status__c = 'Lead Generated',
+                Type__c = 'WC & PI',
+                Case_Type__c = null,
+                litify_pm__Phone__c = '555-CT-MATCH-3',
+                litify_pm__Sign_Up_Method__c = 'E-Sign'
+            ),
+            new litify_pm__Intake__c(
+                litify_pm__Status__c = 'Lead Generated',
+                Type__c = 'Worker Compensation',
+                Case_Type__c = null,
+                litify_pm__Phone__c = '555-CT-MATCH-4',
+                litify_pm__Sign_Up_Method__c = 'E-Sign'
+            )
+        };
+        insert testRecords;
+
+        List<litify_pm__Intake__c> queried = [
+            SELECT Id, Queue_Case_Type__c, Case_Type_Reporting__c
+            FROM litify_pm__Intake__c
+            WHERE Id IN :testRecords
+        ];
+        for (litify_pm__Intake__c record : queried) {
+            Assert.areEqual(record.Case_Type_Reporting__c, record.Queue_Case_Type__c,
+                'Queue case type should mirror Case_Type_Reporting__c');
+        }
+    }
     
     @IsTest
     static void testUserAlreadyHasAssignment() {
@@ -645,13 +690,15 @@ private class LeadQueueServiceTest {
         
         // All returned records should meet the new criteria
         Datetime nowValue = System.now();
+        Set<String> validQueueCaseTypes = new Set<String>(LeadQueueConfig.CASE_TYPE_PRIORITY.keySet());
         for (LeadQueueService.QueueRecord queueRecord : response.records) {
             litify_pm__Intake__c record = queueRecord.record;
             
-            // Must be valid case type
-            Set<String> validTypes = new Set<String>{'Worker Compensation', 'Personal Injury', 'WC & PI'};
-            Assert.isTrue(validTypes.contains(record.Type__c), 
-                         'Record must be a permitted intake type');
+            // Must be valid queue case type (null allowed)
+            if (record.Queue_Case_Type__c != null) {
+                Assert.isTrue(validQueueCaseTypes.contains(record.Queue_Case_Type__c), 
+                             'Record must have a permitted queue case type');
+            }
             
             // Must meet status criteria
             Set<String> validStatuses = new Set<String>{'Lead Generated', 'In Contact/Under Review', 'Missed Appointment', 
@@ -1326,14 +1373,17 @@ private class LeadQueueServiceTest {
         Assert.isTrue(response.success, 'Query should succeed with NULL case type records present');
         Assert.isNotNull(response.records, 'Records should be returned');
 
+        Boolean foundRecord = false;
         // Verify the stored priority score uses the default case type for NULL case type (if found)
         for (LeadQueueService.QueueRecord qr : response.records) {
             if (qr.record.Id == testRecord.Id) {
+                foundRecord = true;
                 // Priority should be 18 (Lead Generated=1 * 10 + NULL=8)
                 Assert.areEqual(18, qr.priorityScore,
                     'NULL case type should have priority score 18 (Lead Generated=1, NULL=8)');
             }
         }
+        Assert.isTrue(foundRecord, 'Record with NULL case type should be returned in the queue');
     }
 
     @IsTest
@@ -1394,6 +1444,109 @@ private class LeadQueueServiceTest {
         Assert.isTrue(response.success, 'Query should succeed');
         Assert.isTrue(response.records.size() >= 1,
             'Valid case type should be included');
+    }
+
+    @IsTest
+    static void testQueueResponseCacheRoundTrip() {
+        litify_pm__Intake__c testRecord = [
+            SELECT Id, litify_pm__Display_Name__c, Referred_By_Name__c, litify_pm__Status__c,
+                   Queue_Case_Type__c, Qualification_Status__c, Call_at_Date__c, litify_pm__Phone__c
+            FROM litify_pm__Intake__c
+            LIMIT 1
+        ];
+
+        LeadQueueService.QueueRecord queueRecord = new LeadQueueService.QueueRecord();
+        queueRecord.record = testRecord;
+        queueRecord.recordId = String.valueOf(testRecord.Id);
+        queueRecord.displayName = null;
+        queueRecord.referredByName = null;
+        queueRecord.status = null;
+        queueRecord.caseType = null;
+        queueRecord.qualificationStatus = null;
+        queueRecord.callAtDate = null;
+        queueRecord.phone = null;
+        queueRecord.priorityScore = 10;
+        queueRecord.isHighPriority = true;
+        queueRecord.isDueToday = false;
+        queueRecord.isOverdue = false;
+        queueRecord.isAssigned = false;
+        queueRecord.assignedTo = '';
+        queueRecord.assignedTimestamp = null;
+
+        LeadQueueService.QueueStats stats = new LeadQueueService.QueueStats();
+        LeadQueueService.FilterOptions filters = new LeadQueueService.FilterOptions();
+        filters.statusOptions = new List<LeadQueueService.PicklistOption>{
+            new LeadQueueService.PicklistOption('All Statuses', '')
+        };
+        filters.caseTypeOptions = new List<LeadQueueService.PicklistOption>{
+            new LeadQueueService.PicklistOption('All Case Types', '')
+        };
+        Map<String, List<String>> tileGroups = new Map<String, List<String>>{
+            'highPriority' => new List<String>{'Lead Generated'}
+        };
+
+        LeadQueueService.QueueResponse response = new LeadQueueService.QueueResponse(
+            new List<LeadQueueService.QueueRecord>{queueRecord},
+            stats,
+            filters,
+            tileGroups,
+            1
+        );
+
+        LeadQueueService.QueueResponseCache cache = new LeadQueueService.QueueResponseCache().fromResponse(response);
+        LeadQueueService.QueueResponse restored = cache.toResponse();
+
+        Assert.isTrue(restored.success, 'Restored response should be marked successful');
+        Assert.areEqual(1, restored.records.size(), 'Restored response should include one record');
+        Assert.areEqual(queueRecord.recordId, restored.records[0].recordId, 'Record id should survive cache round-trip');
+        Assert.areEqual(queueRecord.priorityScore, restored.records[0].priorityScore, 'Priority score should survive cache round-trip');
+
+        LeadQueueService.QueueRecordCache emptyCache = new LeadQueueService.QueueRecordCache();
+        Assert.isNull(emptyCache.toRecord(), 'Blank cache should return null record');
+        Assert.isNull(new LeadQueueService.QueueRecordCache().fromRecord(null), 'Null record should return null cache');
+
+        LeadQueueService.QueueResponseCache emptyResponseCache = new LeadQueueService.QueueResponseCache();
+        emptyResponseCache.records = null;
+        LeadQueueService.QueueResponse emptyRestored = emptyResponseCache.toResponse();
+        Assert.isTrue(emptyRestored.success, 'Empty cache should still return a response');
+    }
+
+    @IsTest
+    static void testCaseTypePriorityBackfillUpdates() {
+        litify_pm__Intake__c testRecord = new litify_pm__Intake__c(
+            litify_pm__Status__c = 'Lead Generated',
+            Type__c = 'Personal Injury',
+            Case_Type__c = 'Labor Law',
+            litify_pm__Phone__c = '555-000-1212',
+            litify_pm__Sign_Up_Method__c = 'Office'
+        );
+        insert testRecord;
+
+        CaseTypePriorityBackfill defaultBatch = new CaseTypePriorityBackfill();
+        CaseTypePriorityBackfill fullBatch = new CaseTypePriorityBackfill(true);
+        defaultBatch.start(null);
+        fullBatch.start(null);
+
+        testRecord.Queue_Case_Type__c = 'Other';
+        testRecord.Priority_Score__c = 999;
+
+        Test.startTest();
+        defaultBatch.execute(null, new List<litify_pm__Intake__c>{testRecord});
+        Test.stopTest();
+
+        litify_pm__Intake__c updated = [
+            SELECT Queue_Case_Type__c, Priority_Score__c, litify_pm__Status__c, Type__c, Case_Type__c
+            FROM litify_pm__Intake__c
+            WHERE Id = :testRecord.Id
+        ];
+
+        String expectedCaseType = LeadQueueConfig.normalizeCaseType(updated.Type__c, updated.Case_Type__c);
+        Integer expectedPriority = LeadQueueConfig.calculatePriorityScore(
+            updated.litify_pm__Status__c,
+            LeadQueueConfig.getCaseTypePriority(expectedCaseType)
+        );
+        Assert.areEqual(expectedCaseType, updated.Queue_Case_Type__c, 'Queue case type should be recalculated');
+        Assert.areEqual(expectedPriority, updated.Priority_Score__c, 'Priority score should be recalculated');
     }
 
     private static Boolean isCacheUnavailable(LeadQueueService.AssignmentResult result) {

@@ -599,8 +599,18 @@ public with sharing class LeadQueueService {
         return ALL_QUEUE_STATUSES;
     }
 
+    private static void addQueueCaseTypeEligibilityCondition(List<String> conditions, Map<String, Object> bindVars) {
+        Set<String> allowedCaseTypes = LeadQueueConfig.CASE_TYPE_PRIORITY.keySet();
+        if (allowedCaseTypes == null || allowedCaseTypes.isEmpty()) {
+            return;
+        }
+        conditions.add('(Queue_Case_Type__c = null OR Queue_Case_Type__c IN :allowedCaseTypes)');
+        bindVars.put('allowedCaseTypes', new List<String>(allowedCaseTypes));
+    }
+
     private static List<String> buildFilterConditions(String statusFilter, String caseTypeFilter, String dueDateFilter, String tileFilter, Map<String, Object> bindVars) {
         List<String> conditions = new List<String>();
+        addQueueCaseTypeEligibilityCondition(conditions, bindVars);
         if (String.isNotBlank(statusFilter)) {
             conditions.add('litify_pm__Status__c = :statusFilter');
             bindVars.put('statusFilter', statusFilter);

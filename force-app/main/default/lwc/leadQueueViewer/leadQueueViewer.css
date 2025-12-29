@@ -1,24 +1,45 @@
+:host {
+    --lq-spacing-xxxs: 0.125rem;
+    --lq-spacing-xxs: 0.25rem;
+    --lq-spacing-xs: 0.5rem;
+    --lq-spacing-sm: 0.75rem;
+    --lq-spacing-md: 1rem;
+    --lq-spacing-lg: 1.5rem;
+    --lq-spacing-xxl: 2rem;
+    --lq-radius-lg: 0.5rem;
+    --lq-border-thin: 1px;
+    --lq-border-thick: 2px;
+    --lq-color-border: #e5e5e5;
+    --lq-color-bg-alt: #ffffff;
+    --lq-color-bg-light: #f8f9fa;
+    --lq-color-text-label: #3e3e3c;
+    --lq-color-text-weak: #706e6b;
+    --lq-color-link: #0176d3;
+    --lq-color-link-hover: #014486;
+    --lq-color-brand: #0176d3;
+    --lq-color-gray-10: #4f4f4f;
+}
 /* Utility Bar Compact Interface */
 .utility-container {
     display: flex;
     flex-direction: column;
-    padding: 4px;
+    padding: var(--lq-spacing-xxs);
     align-items: center;
     justify-content: center;
     min-height: 60px;
-    gap: 2px;
+    gap: var(--lq-spacing-xxxs);
     pointer-events: none;
 }
 
 .cache-warning {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: var(--lq-spacing-sm);
     background: #fef7e0;
-    border: 1px solid #ffb75d;
-    border-radius: 0.5rem;
-    padding: 0.75rem 1rem;
-    margin: 0.5rem 0 1rem;
+    border: var(--lq-border-thin) solid #ffb75d;
+    border-radius: var(--lq-radius-lg);
+    padding: var(--lq-spacing-sm) var(--lq-spacing-md);
+    margin: var(--lq-spacing-xs) 0 var(--lq-spacing-md);
     pointer-events: auto;
 }
 
@@ -29,65 +50,65 @@
 .cache-warning-content {
     flex: 1;
     font-size: 0.875rem;
-    color: #514f4d;
+    color: var(--lq-color-gray-10);
 }
 
 .cache-warning-actions {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: var(--lq-spacing-xs);
     pointer-events: auto;
 }
 
 /* Card-based layout with subtle borders and shadows */
 .utility-card {
-    background: #ffffff;
-    border: 1px solid #e5e5e5;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-    padding: 8px;
-    width: calc(100% - 16px);
+    background: var(--lq-color-bg-alt);
+    border: var(--lq-border-thin) solid var(--lq-color-border);
+    border-radius: var(--lq-radius-lg);
+    box-shadow: 0 var(--lq-spacing-xxxs) var(--lq-spacing-xxs) rgba(0, 0, 0, 0.05);
+    padding: var(--lq-spacing-xs);
+    width: calc(100% - var(--lq-spacing-md));
     max-width: 300px;
     transition: box-shadow 0.2s ease;
     pointer-events: none;
-    margin: 2px;
+    margin: var(--lq-spacing-xxxs);
 }
 
 .utility-card:hover {
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 var(--lq-spacing-xxs) var(--lq-spacing-xs) rgba(0, 0, 0, 0.1);
 }
 
 .assigned-card {
-    background: #f8f9fa;
+    background: var(--lq-color-bg-light);
     border-color: #d1ecf1;
 }
 
 /* Record name styling - matches Salesforce standard record text */
 .assigned-record-link {
     --slds-c-button-font-size: 0.8125rem;
-    --slds-c-button-text-color: #0176d3;
+    --slds-c-button-text-color: var(--lq-color-link);
     --slds-c-button-font-weight: 400;
     --slds-c-button-line-height: 0.25;
     --slds-c-button-spacing-inline-start: 0;
     --slds-c-button-spacing-inline-end: 0;
     pointer-events: auto;
     text-align: left;
-    margin: 4px 0 6px 0;
+    margin: var(--lq-spacing-xxs) 0 calc(var(--lq-spacing-xs) - var(--lq-spacing-xxxs)) 0;
 }
 
 /* Status text styling */
 .assigned-record-status {
     font-size: 0.75rem;
     font-weight: 500;
-    color: #3e3e3c;
+    color: var(--lq-color-text-label);
     text-align: left;
-    margin: 0 0 6px 0;
+    margin: 0 0 calc(var(--lq-spacing-xs) - var(--lq-spacing-xxxs)) 0;
 }
 
 /* Timer display */
 .assigned-timer {
     font-size: 0.75rem;
-    color: #706e6b;
+    color: var(--lq-color-text-weak);
     text-align: left;
     margin: 0;
     font-weight: 400;
@@ -95,8 +116,8 @@
 
 /* Button wrapper to control clickable area */
 .button-wrapper {
-    width: calc(100% - 8px);
-    margin: 2px;
+    width: calc(100% - var(--lq-spacing-xs));
+    margin: var(--lq-spacing-xxxs);
     pointer-events: none;
     overflow: hidden;
     display: flex;
@@ -106,10 +127,10 @@
 
 /* Button styling - restored functional CSS */
 .utility-action {
-    font-size: 12px;
-    min-height: 32px;
+    font-size: 0.875rem;
+    min-height: 2rem;
     width: 100%;
-    padding: 8px 8px;
+    padding: var(--lq-spacing-xs);
     pointer-events: auto;
     box-sizing: border-box;
     max-width: 100%;
@@ -117,12 +138,12 @@
 }
 
 .release-button {
-    margin-bottom: 4px;
+    margin-bottom: var(--lq-spacing-xxs);
 }
 
 /* Compact button sizing for utility bar */
 .utility-container lightning-button {
-    --slds-c-button-sizing-border: 1px;
+    --slds-c-button-sizing-border: var(--lq-border-thin);
     --slds-c-button-font-size: 0.75rem;
     box-sizing: border-box !important;
     width: 100% !important;
@@ -138,22 +159,22 @@
 .stats-container {
     display: -ms-grid;
     display: grid;
-    -ms-grid-columns: 1fr 1rem 1fr 1rem 1fr;
+    -ms-grid-columns: 1fr var(--lq-spacing-md) 1fr var(--lq-spacing-md) 1fr;
     grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 1rem;
-    padding: 1rem;
+    gap: var(--lq-spacing-md);
+    padding: var(--lq-spacing-md);
     background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-    border-radius: 0.5rem;
-    margin-bottom: 1rem;
+    border-radius: var(--lq-radius-lg);
+    margin-bottom: var(--lq-spacing-md);
 }
 
 .stat-card {
-    background: white;
-    padding: 1rem;
-    border-radius: 0.5rem;
+    background: var(--lq-color-bg-alt);
+    padding: var(--lq-spacing-md);
+    border-radius: var(--lq-radius-lg);
     text-align: center;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    border: 2px solid transparent;
+    box-shadow: 0 var(--lq-spacing-xxxs) var(--lq-spacing-xxs) rgba(0,0,0,0.1);
+    border: var(--lq-border-thick) solid transparent;
     cursor: pointer;
     transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
 }
@@ -161,25 +182,25 @@
 .stat-card:hover,
 .stat-card:focus {
     transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    box-shadow: 0 var(--lq-spacing-xxs) var(--lq-spacing-xs) rgba(0,0,0,0.15);
     outline: none;
 }
 
 .stat-card:focus {
-    border-color: #0176d3;
+    border-color: var(--lq-color-brand);
 }
 
 .stat-number {
     font-size: 2rem;
     font-weight: 700;
-    color: #0176d3;
+    color: var(--lq-color-link);
     line-height: 1;
 }
 
 .stat-label {
     font-size: 0.875rem;
-    color: #706e6b;
-    margin-top: 0.25rem;
+    color: var(--lq-color-text-weak);
+    margin-top: var(--lq-spacing-xxs);
 }
 
 /* Stat color variants */
@@ -192,10 +213,10 @@
 /* Action Bar */
 .action-bar {
     display: flex;
-    gap: 0.75rem;
+    gap: var(--lq-spacing-sm);
     align-items: center;
-    padding: 1rem;
-    border-bottom: 1px solid #e5e5e5;
+    padding: var(--lq-spacing-md);
+    border-bottom: var(--lq-border-thin) solid var(--lq-color-border);
     flex-wrap: wrap;
 }
 
@@ -205,7 +226,7 @@
 
 .view-selector {
     margin-left: auto;
-    margin-right: 0.75rem;
+    margin-right: var(--lq-spacing-sm);
 }
 
 .refresh-btn {
@@ -216,11 +237,11 @@
 .filter-section {
     display: -ms-grid;
     display: grid;
-    -ms-grid-columns: 1fr 1rem 1fr 1rem 1fr 1rem auto;
+    -ms-grid-columns: 1fr var(--lq-spacing-md) 1fr var(--lq-spacing-md) 1fr var(--lq-spacing-md) auto;
     grid-template-columns: 1fr 1fr 1fr auto;
-    gap: 1rem;
-    padding: 1rem;
-    background: #fafafa;
+    gap: var(--lq-spacing-md);
+    padding: var(--lq-spacing-md);
+    background: var(--lq-color-bg-alt);
     -ms-grid-row-align: end;
     align-items: end;
 }
@@ -231,22 +252,22 @@
 
 /* Table Container */
 .table-container {
-    border-top: 1px solid #e5e5e5;
+    border-top: var(--lq-border-thin) solid var(--lq-color-border);
 }
 
 .pagination-bar {
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 0.75rem;
-    padding: 0.75rem 1rem;
-    border-top: 1px solid #e5e5e5;
-    background: #fafafa;
+    gap: var(--lq-spacing-sm);
+    padding: var(--lq-spacing-sm) var(--lq-spacing-md);
+    border-top: var(--lq-border-thin) solid var(--lq-color-border);
+    background: var(--lq-color-bg-alt);
 }
 
 .page-indicator {
     font-size: 0.875rem;
-    color: #514f4d;
+    color: var(--lq-color-gray-10);
     min-width: 120px;
     text-align: center;
 }
@@ -256,37 +277,37 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 3rem;
+    padding: var(--lq-spacing-xxl);
 }
 
 /* Empty State */
 .empty-state {
     text-align: center;
-    padding: 3rem;
-    color: #706e6b;
+    padding: var(--lq-spacing-xxl);
+    color: var(--lq-color-text-weak);
 }
 
 .empty-state lightning-icon {
-    margin-bottom: 1rem;
+    margin-bottom: var(--lq-spacing-md);
     opacity: 0.6;
 }
 
 .empty-state h3 {
     font-size: 1.25rem;
-    margin-bottom: 0.5rem;
-    color: #3e3e3c;
+    margin-bottom: var(--lq-spacing-xs);
+    color: var(--lq-color-text-label);
 }
 
 /* Responsive Design */
 @media (max-width: 768px) {
     .stats-container { 
-        -ms-grid-columns: 1fr 1rem 1fr;
+        -ms-grid-columns: 1fr var(--lq-spacing-md) 1fr;
         grid-template-columns: repeat(2, 1fr); 
     }
     .filter-section { 
         -ms-grid-columns: 1fr;
         grid-template-columns: 1fr; 
-        gap: 0.75rem; 
+        gap: var(--lq-spacing-sm); 
     }
     .action-bar { 
         flex-direction: column; 
@@ -307,44 +328,44 @@
         -ms-grid-columns: 1fr;
         grid-template-columns: 1fr; 
     }
-    .stat-card { padding: 0.75rem; }
+    .stat-card { padding: var(--lq-spacing-sm); }
     .stat-number { font-size: 1.5rem; }
 }
 
 /* Active tile filter styling */
 .stat-card.active-filter {
     background-color: #e6f3ff;
-    border-color: #0176d3;
-    box-shadow: 0 2px 8px rgba(1, 118, 211, 0.3);
+    border-color: var(--lq-color-brand);
+    box-shadow: 0 var(--lq-spacing-xxxs) var(--lq-spacing-xs) rgba(1, 118, 211, 0.3);
 }
 
 /* URL link styling for Name column */
 :host ::deep .link-cell {
-    color: #0176d3;
+    color: var(--lq-color-link);
     text-decoration: underline;
     cursor: pointer;
 }
 
 :host ::deep .link-cell:hover,
 :host ::deep .link-cell:focus {
-    color: #014486;
+    color: var(--lq-color-link-hover);
 }
 
-:host ::deep .link-cell .slds-truncate {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: inline-block;
+:host ::deep .link-cell a {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 /* Control text wrapping in datatable cells */
 :host ::deep lightning-datatable tbody tr td,
 :host ::deep lightning-datatable tbody tr th {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
     max-width: 200px;
     position: relative;
 }
+
 
 

@@ -1,12 +1,28 @@
 public class CaseTypePriorityBackfill implements Database.Batchable<SObject> {
+    private final Boolean fullRecalc;
+
+    public CaseTypePriorityBackfill() {
+        this(false);
+    }
+
+    public CaseTypePriorityBackfill(Boolean fullRecalc) {
+        this.fullRecalc = fullRecalc == true;
+    }
+
     public Database.QueryLocator start(Database.BatchableContext context) {
+        if (fullRecalc) {
+            return Database.getQueryLocator([
+                SELECT Id, Type__c, Case_Type__c, Queue_Case_Type__c, litify_pm__Status__c, Priority_Score__c
+                FROM litify_pm__Intake__c
+            ]);
+        }
+
         return Database.getQueryLocator([
             SELECT Id, Type__c, Case_Type__c, Queue_Case_Type__c, litify_pm__Status__c, Priority_Score__c
             FROM litify_pm__Intake__c
-            WHERE Type__c != null
-                OR Case_Type__c != null
-                OR Queue_Case_Type__c != null
-                OR Priority_Score__c = null
+            WHERE Priority_Score__c = null
+                OR Queue_Case_Type__c = null
+                OR (Type__c = null AND Case_Type__c = null AND Queue_Case_Type__c != null)
         ]);
     }
 
