@@ -7,7 +7,7 @@ public class LeadQueueConfig {
         'Intake Package Sent',
         'Attempting to Contact',
         'Questionnaire',
-        'Pending Referral'
+        'Referral Pending'
     };
 
     public static final Integer DEFAULT_STATUS_PRIORITY = 99;

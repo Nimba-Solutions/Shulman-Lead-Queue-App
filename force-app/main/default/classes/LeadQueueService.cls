@@ -11,7 +11,7 @@ public with sharing class LeadQueueService {
         'inContact' => new Set<String>{'In Contact/Under Review', 'Questionnaire', 'Missed Appointment'},
         'noContact' => new Set<String>{'Attempting to Contact'},
         'retainerSent' => new Set<String>{'Intake Package Sent'},
-        'referrals' => new Set<String>{'Pending Referral'}
+        'referrals' => new Set<String>{'Referral Pending'}
     };
     
     private static final Set<String> EXCLUDED_INTAKE_TYPES = new Set<String>{
@@ -71,7 +71,7 @@ public with sharing class LeadQueueService {
 
     private static Set<String> buildScheduledCallStatuses() {
         Set<String> result = new Set<String>(STATUS_ORDER);
-        result.remove('Pending Referral');
+        result.remove('Referral Pending');
         return result;
     }
     

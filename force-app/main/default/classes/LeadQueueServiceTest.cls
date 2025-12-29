@@ -153,7 +153,7 @@ private class LeadQueueServiceTest {
             'Intake Package Sent',
             'Attempting to Contact',
             'Questionnaire',
-            'Pending Referral'
+            'Referral Pending'
         };
         
         List<String> actualValues = new List<String>();
@@ -187,17 +187,17 @@ private class LeadQueueServiceTest {
         for (LeadQueueService.PicklistOption option : response.filters.statusOptions) {
             statusValues.add(option.value);
         }
-        Assert.isFalse(statusValues.contains('Pending Referral'), 'Scheduled calls should not include Pending Referral status option');
+        Assert.isFalse(statusValues.contains('Referral Pending'), 'Scheduled calls should not include Referral Pending status option');
     }
 
     @IsTest
     static void testReferralCountInStats() {
-        if (!isStatusPicklistValueAvailable('Pending Referral')) {
-            Assert.isTrue(true, 'Pending Referral status not configured in org');
+        if (!isStatusPicklistValueAvailable('Referral Pending')) {
+            Assert.isTrue(true, 'Referral Pending status not configured in org');
             return;
         }
         litify_pm__Intake__c referralIntake = new litify_pm__Intake__c(
-            litify_pm__Status__c = 'Pending Referral',
+            litify_pm__Status__c = 'Referral Pending',
             Type__c = 'Personal Injury',
             Case_Type__c = 'MVA',
             litify_pm__Phone__c = '555-REFERRAL-COUNT',
