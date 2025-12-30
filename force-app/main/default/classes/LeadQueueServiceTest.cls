@@ -124,7 +124,7 @@ private class LeadQueueServiceTest {
     @IsTest
     static void testGetQueueData() {
         Test.startTest();
-        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
+        LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
         Test.stopTest();
         
         Assert.isNotNull(response, 'Response should not be null');
@@ -137,7 +137,7 @@ private class LeadQueueServiceTest {
     @IsTest
     static void testStatusOptionsOrderAndGroups() {
         Test.startTest();
-        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
+        LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
         Test.stopTest();
         
         Assert.isTrue(response.success, 'Response should be successful');
@@ -157,7 +157,7 @@ private class LeadQueueServiceTest {
         };
         
         List<String> actualValues = new List<String>();
-        for (LeadQueueService.PicklistOption option : response.filters.statusOptions) {
+        for (LeadQueueModels.PicklistOption option : response.filters.statusOptions) {
             actualValues.add(option.value);
         }
         
@@ -179,12 +179,12 @@ private class LeadQueueServiceTest {
     @IsTest
     static void testScheduledCallStatusOptionsExcludePendingReferral() {
         Test.startTest();
-        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', '', true);
+        LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData('', '', '', true);
         Test.stopTest();
         
         Assert.isTrue(response.success, 'Scheduled calls response should be successful');
         List<String> statusValues = new List<String>();
-        for (LeadQueueService.PicklistOption option : response.filters.statusOptions) {
+        for (LeadQueueModels.PicklistOption option : response.filters.statusOptions) {
             statusValues.add(option.value);
         }
         Assert.isFalse(statusValues.contains('Referral Pending'), 'Scheduled calls should not include Referral Pending status option');
@@ -207,7 +207,7 @@ private class LeadQueueServiceTest {
         insert referralIntake;
         
         Test.startTest();
-        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
+        LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
         Test.stopTest();
         
         Assert.isTrue(response.success, 'Ready to call response should be successful');
@@ -230,7 +230,7 @@ private class LeadQueueServiceTest {
         litify_pm__Intake__c testRecord = [SELECT Id FROM litify_pm__Intake__c LIMIT 1];
         
         Test.startTest();
-        LeadQueueService.AssignmentResult result = LeadQueueService.assignRecord(testRecord.Id);
+        LeadQueueModels.AssignmentResult result = LeadQueueService.assignRecord(testRecord.Id);
         Test.stopTest();
 
         if (isCacheUnavailable(result)) {
@@ -265,7 +265,7 @@ private class LeadQueueServiceTest {
         
         Test.startTest();
         // First assignment should succeed
-        LeadQueueService.AssignmentResult result1 = LeadQueueService.assignRecord(testRecord.Id);
+        LeadQueueModels.AssignmentResult result1 = LeadQueueService.assignRecord(testRecord.Id);
         if (isCacheUnavailable(result1)) {
             Test.stopTest();
             Assert.isTrue(result1.message.contains('Platform Cache not configured'), 'Should report missing Platform Cache');
@@ -274,7 +274,7 @@ private class LeadQueueServiceTest {
         Assert.isTrue(result1.success, 'First assignment should succeed');
         
         // Second assignment should fail if cache is available, otherwise may succeed with warning
-        LeadQueueService.AssignmentResult result2 = LeadQueueService.assignRecord(testRecord.Id);
+        LeadQueueModels.AssignmentResult result2 = LeadQueueService.assignRecord(testRecord.Id);
         if (!result2.success) {
             Assert.isTrue(result2.message.contains('already assigned') || result2.message.contains('Platform Cache not configured'),
                 'Should indicate existing assignment or missing cache');
@@ -287,7 +287,7 @@ private class LeadQueueServiceTest {
     @IsTest
     static void testAssignNonExistentRecord() {
         Test.startTest();
-        LeadQueueService.AssignmentResult result = LeadQueueService.assignRecord('0031234567890XX');
+        LeadQueueModels.AssignmentResult result = LeadQueueService.assignRecord('0031234567890XX');
         Assert.isFalse(result.success, 'Assignment of non-existent record should fail');
         Test.stopTest();
     }
@@ -298,7 +298,7 @@ private class LeadQueueServiceTest {
         delete [SELECT Id FROM litify_pm__Intake__c];
         
         Test.startTest();
-        LeadQueueService.AssignmentResult result = LeadQueueService.assignNextAvailableRecord('', '', '', false, null);
+        LeadQueueModels.AssignmentResult result = LeadQueueService.assignNextAvailableRecord('', '', '', false, null);
         Assert.isFalse(result.success, 'Assignment should fail when queue is empty');
         Assert.isTrue(result.message.contains('No available records'), 'Should indicate no records available');
         Test.stopTest();
@@ -307,7 +307,7 @@ private class LeadQueueServiceTest {
     @IsTest
     static void testGetQueueDataWithFilters() {
         Test.startTest();
-        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('Lead Generated', 'MVA', '', false);
+        LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData('Lead Generated', 'MVA', '', false);
         Assert.isNotNull(response, 'Filtered response should not be null');
         Assert.isTrue(response.success, 'Filtered response should be successful: ' + response.errorMessage);
         Assert.isNotNull(response.records, 'Filtered records should not be null');
@@ -317,7 +317,7 @@ private class LeadQueueServiceTest {
     @IsTest
     static void testAssignNextAvailableRecord() {
         Test.startTest();
-        LeadQueueService.AssignmentResult result = LeadQueueService.assignNextAvailableRecord('', '', '', false, null);
+        LeadQueueModels.AssignmentResult result = LeadQueueService.assignNextAvailableRecord('', '', '', false, null);
         
         // With new filtering logic requiring Call_at_Date >= NOW, records may not be available in test context
         // since Call_at_Date is a formula field that may not be populated with future dates
@@ -331,7 +331,7 @@ private class LeadQueueServiceTest {
         }
         
         // Test scheduled calls assignment
-        LeadQueueService.AssignmentResult scheduledResult = LeadQueueService.assignNextAvailableRecord('', '', '', true, null);
+        LeadQueueModels.AssignmentResult scheduledResult = LeadQueueService.assignNextAvailableRecord('', '', '', true, null);
         Assert.isNotNull(scheduledResult, 'Scheduled calls result should not be null');
         
         Test.stopTest();
@@ -341,7 +341,7 @@ private class LeadQueueServiceTest {
     static void testValidFilterInputs() {
         Test.startTest();
         // Test with valid filters - should not throw exception
-        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('Lead Generated', 'MVA', 'today', false);
+        LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData('Lead Generated', 'MVA', 'today', false);
         Assert.isNotNull(response, 'Response should not be null with valid filters');
         Assert.isTrue(response.success, 'Response should be successful with valid filters: ' + response.errorMessage);
         Test.stopTest();
@@ -353,7 +353,7 @@ private class LeadQueueServiceTest {
         
         Test.startTest();
         // Test assignment creates cache entry (or handles cache unavailability)
-        LeadQueueService.AssignmentResult result = LeadQueueService.assignRecord(testRecord.Id);
+        LeadQueueModels.AssignmentResult result = LeadQueueService.assignRecord(testRecord.Id);
         List<String> assignedIds = LeadQueueService.getUserAssignedRecordIds();
         Boolean releaseResult = LeadQueueService.releaseUserAssignments(null);
         Assert.isTrue(releaseResult, 'Release should succeed');
@@ -375,7 +375,7 @@ private class LeadQueueServiceTest {
         LeadQueueService.enableCacheSimulation(true);
         try {
             Test.startTest();
-            LeadQueueService.AssignmentResult result = LeadQueueService.assignRecord(testRecord.Id);
+            LeadQueueModels.AssignmentResult result = LeadQueueService.assignRecord(testRecord.Id);
             Test.stopTest();
             
             Assert.isTrue(result.success, 'Assignment should succeed with simulated cache: ' + result.message);
@@ -396,7 +396,7 @@ private class LeadQueueServiceTest {
     @IsTest
     static void testBusinessLogicValidation() {
         Test.startTest();
-        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
+        LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
         Test.stopTest();
         
         // Basic validation that doesn't depend on read-only fields
@@ -411,19 +411,19 @@ private class LeadQueueServiceTest {
         Test.startTest();
         
         // Test today filter
-        LeadQueueService.QueueResponse todayResponse = LeadQueueService.getQueueData('', '', 'today', false);
+        LeadQueueModels.QueueResponse todayResponse = LeadQueueService.getQueueData('', '', 'today', false);
         Assert.isNotNull(todayResponse, 'Today filter response should not be null');
         
         // Test this week filter  
-        LeadQueueService.QueueResponse thisWeekResponse = LeadQueueService.getQueueData('', '', 'thisWeek', false);
+        LeadQueueModels.QueueResponse thisWeekResponse = LeadQueueService.getQueueData('', '', 'thisWeek', false);
         Assert.isNotNull(thisWeekResponse, 'This week filter response should not be null');
         
         // Test next week filter
-        LeadQueueService.QueueResponse nextWeekResponse = LeadQueueService.getQueueData('', '', 'nextWeek', false);
+        LeadQueueModels.QueueResponse nextWeekResponse = LeadQueueService.getQueueData('', '', 'nextWeek', false);
         Assert.isNotNull(nextWeekResponse, 'Next week filter response should not be null');
         
         // Test scheduled calls functionality (future calls)
-        LeadQueueService.QueueResponse scheduledCallsResponse = LeadQueueService.getQueueData('', '', '', true);
+        LeadQueueModels.QueueResponse scheduledCallsResponse = LeadQueueService.getQueueData('', '', '', true);
         Assert.isNotNull(scheduledCallsResponse, 'Scheduled calls response should not be null');
         
         Test.stopTest();
@@ -447,7 +447,7 @@ private class LeadQueueServiceTest {
 
         User runAsUser = [SELECT Id FROM User WHERE Id = :UserInfo.getUserId()];
 
-        LeadQueueService.QueueResponse response;
+        LeadQueueModels.QueueResponse response;
         Datetime runAsCallDate;
         String runAsCaseType;
         System.runAs(runAsUser) {
@@ -481,11 +481,11 @@ private class LeadQueueServiceTest {
         insert otherIntake;
         
         Test.startTest();
-        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
+        LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
         Test.stopTest();
         
         Boolean containsOther = false;
-        for (LeadQueueService.QueueRecord record : response.records) {
+        for (LeadQueueModels.QueueRecord record : response.records) {
             if (record.record.Id == otherIntake.Id) {
                 containsOther = true;
                 Assert.areEqual('Other', record.record.Queue_Case_Type__c,
@@ -509,11 +509,11 @@ private class LeadQueueServiceTest {
         insert personalInjuryIntake;
 
         Test.startTest();
-        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
+        LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
         Test.stopTest();
 
         Boolean containsPersonalInjury = false;
-        for (LeadQueueService.QueueRecord record : response.records) {
+        for (LeadQueueModels.QueueRecord record : response.records) {
             if (record.record.Id == personalInjuryIntake.Id) {
                 containsPersonalInjury = true;
                 Assert.areEqual('Personal Injury', record.record.Queue_Case_Type__c,
@@ -575,7 +575,7 @@ private class LeadQueueServiceTest {
         
         Test.startTest();
         // First assignment should succeed
-        LeadQueueService.AssignmentResult result1 = LeadQueueService.assignRecord(testRecords[0].Id);
+        LeadQueueModels.AssignmentResult result1 = LeadQueueService.assignRecord(testRecords[0].Id);
         if (isCacheUnavailable(result1)) {
             Test.stopTest();
             Assert.isTrue(result1.message.contains('Platform Cache not configured'), 'Should report missing Platform Cache');
@@ -584,7 +584,7 @@ private class LeadQueueServiceTest {
         Assert.isTrue(result1.success, 'First assignment should succeed');
         
         // Second assignment should fail if cache is available, otherwise may succeed with warning
-        LeadQueueService.AssignmentResult result2 = LeadQueueService.assignRecord(testRecords[1].Id);
+        LeadQueueModels.AssignmentResult result2 = LeadQueueService.assignRecord(testRecords[1].Id);
         if (!result2.success) {
             Assert.isTrue(result2.message.contains('already has an assigned record') || result2.message.contains('Platform Cache not configured'),
                 'Should indicate user already has assignment or missing cache');
@@ -599,7 +599,7 @@ private class LeadQueueServiceTest {
         Test.startTest();
         
         // Test that getQueueData processes available records
-        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
+        LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
         
         // Verify response structure is valid
         Assert.isNotNull(response.records, 'Should return records list');
@@ -614,10 +614,10 @@ private class LeadQueueServiceTest {
         Test.startTest();
         
         // Test that business validation is applied
-        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
+        LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
         
         // Verify all returned records have required business data structure
-        for (LeadQueueService.QueueRecord qr : response.records) {
+        for (LeadQueueModels.QueueRecord qr : response.records) {
             Assert.isNotNull(qr.record, 'Queue record should have record data');
             Assert.isNotNull(qr.priorityScore, 'Queue record should have priority score');
         }
@@ -629,10 +629,10 @@ private class LeadQueueServiceTest {
     static void testPriorityCalculationLogic() {
         Test.startTest();
         
-        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
+        LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
         
         // Verify priority score handling (default to 99 if null)
-        for (LeadQueueService.QueueRecord qr : response.records) {
+        for (LeadQueueModels.QueueRecord qr : response.records) {
             Assert.isNotNull(qr.priorityScore, 'Priority score should not be null');
             Assert.isTrue(qr.priorityScore >= 0, 'Priority score should be valid number');
         }
@@ -645,10 +645,10 @@ private class LeadQueueServiceTest {
         Test.startTest();
         
         // Test that date filters work without errors
-        LeadQueueService.QueueResponse todayResponse = LeadQueueService.getQueueData('', '', 'today', false);
+        LeadQueueModels.QueueResponse todayResponse = LeadQueueService.getQueueData('', '', 'today', false);
         Assert.isNotNull(todayResponse, 'Today filter should work');
         
-        LeadQueueService.QueueResponse thisWeekResponse = LeadQueueService.getQueueData('', '', 'thisWeek', false);
+        LeadQueueModels.QueueResponse thisWeekResponse = LeadQueueService.getQueueData('', '', 'thisWeek', false);
         Assert.isNotNull(thisWeekResponse, 'This week filter should work');
         
         Test.stopTest();
@@ -658,7 +658,7 @@ private class LeadQueueServiceTest {
     static void testNewTileStatisticsCalculation() {
         Test.startTest();
         
-        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
+        LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
         
         // Verify new statistics are calculated correctly
         Assert.isNotNull(response.stats, 'Stats should not be null');
@@ -682,7 +682,7 @@ private class LeadQueueServiceTest {
         Test.startTest();
         
         // Test the new core filtering logic with multiple status criteria
-        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
+        LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
         
         // Verify only qualifying records are returned
         Assert.isNotNull(response, 'Response should not be null');
@@ -691,7 +691,7 @@ private class LeadQueueServiceTest {
         // All returned records should meet the new criteria
         Datetime nowValue = System.now();
         Set<String> validQueueCaseTypes = new Set<String>(LeadQueueConfig.CASE_TYPE_PRIORITY.keySet());
-        for (LeadQueueService.QueueRecord queueRecord : response.records) {
+        for (LeadQueueModels.QueueRecord queueRecord : response.records) {
             litify_pm__Intake__c record = queueRecord.record;
             
             // Must be valid queue case type (null allowed)
@@ -730,7 +730,7 @@ private class LeadQueueServiceTest {
         // This will help cover the catch block in getQueueData
         try {
             // Test with extreme filter values that might cause issues
-            LeadQueueService.QueueResponse response = LeadQueueService.getQueueData(
+            LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData(
                 'NonExistentStatus'.repeat(100), 
                 'NonExistentCaseType'.repeat(100), 
                 'invalidDateFilter',
@@ -751,14 +751,14 @@ private class LeadQueueServiceTest {
         Test.startTest();
         
         // Test null/blank record ID scenarios to cover validation paths
-        LeadQueueService.AssignmentResult nullResult = LeadQueueService.assignRecord(null);
+        LeadQueueModels.AssignmentResult nullResult = LeadQueueService.assignRecord(null);
         Assert.isFalse(nullResult.success, 'Null record ID should fail');
         Assert.isTrue(nullResult.message.contains('required'), 'Should indicate ID is required');
         
-        LeadQueueService.AssignmentResult blankResult = LeadQueueService.assignRecord('');
+        LeadQueueModels.AssignmentResult blankResult = LeadQueueService.assignRecord('');
         Assert.isFalse(blankResult.success, 'Blank record ID should fail');
         
-        LeadQueueService.AssignmentResult invalidResult = LeadQueueService.assignRecord('invalid-id');
+        LeadQueueModels.AssignmentResult invalidResult = LeadQueueService.assignRecord('invalid-id');
         Assert.isFalse(invalidResult.success, 'Invalid ID format should fail');
         
         Test.stopTest();
@@ -772,7 +772,7 @@ private class LeadQueueServiceTest {
         // This helps cover the cache null check paths
         litify_pm__Intake__c testRecord = [SELECT Id FROM litify_pm__Intake__c LIMIT 1];
         
-        LeadQueueService.AssignmentResult result = LeadQueueService.assignRecord(testRecord.Id);
+        LeadQueueModels.AssignmentResult result = LeadQueueService.assignRecord(testRecord.Id);
         
         // Assignment should succeed or handle cache unavailability gracefully
         Assert.isNotNull(result, 'Result should not be null');
@@ -792,13 +792,13 @@ private class LeadQueueServiceTest {
         Test.startTest();
         
         // Test various filter combinations to ensure coverage of filter logic
-        LeadQueueService.QueueResponse response1 = LeadQueueService.getQueueData('Lead Generated', '', '', false);
+        LeadQueueModels.QueueResponse response1 = LeadQueueService.getQueueData('Lead Generated', '', '', false);
         Assert.isNotNull(response1, 'Status filter only should work');
         
-        LeadQueueService.QueueResponse response2 = LeadQueueService.getQueueData('', 'MVA', '', false);
+        LeadQueueModels.QueueResponse response2 = LeadQueueService.getQueueData('', 'MVA', '', false);
         Assert.isNotNull(response2, 'Case type filter only should work');
         
-        LeadQueueService.QueueResponse response3 = LeadQueueService.getQueueData('Lead Generated', 'MVA', 'today', false);
+        LeadQueueModels.QueueResponse response3 = LeadQueueService.getQueueData('Lead Generated', 'MVA', 'today', false);
         Assert.isNotNull(response3, 'All filters combined should work');
         
         Test.stopTest();
@@ -814,7 +814,7 @@ private class LeadQueueServiceTest {
             // Create a scenario that might trigger QueryException or other system errors
             // by testing with potentially problematic input patterns
             String extremelyLongFilter = 'x'.repeat(1000);  // Very long string that might cause issues
-            LeadQueueService.QueueResponse response = LeadQueueService.getQueueData(
+            LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData(
                 extremelyLongFilter, 
                 extremelyLongFilter, 
                 extremelyLongFilter,
@@ -846,7 +846,7 @@ private class LeadQueueServiceTest {
         try {
             // Test with normal parameters - if permissions are good, this succeeds
             // If permissions fail, we catch the exception
-            LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
+            LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
             Assert.isNotNull(response, 'Normal case should work with proper permissions');
         } catch (AuraHandledException e) {
             // This would cover line 35 if permissions were insufficient
@@ -866,12 +866,12 @@ private class LeadQueueServiceTest {
         String recordId = testRecord.Id;
         
         // Test complete assignment workflow
-        LeadQueueService.AssignmentResult assignResult = LeadQueueService.assignRecord(recordId);
+        LeadQueueModels.AssignmentResult assignResult = LeadQueueService.assignRecord(recordId);
         List<String> userAssigned = LeadQueueService.getUserAssignedRecordIds();
         Boolean releaseResult = LeadQueueService.releaseUserAssignments(null);
         
         // Test next available assignment workflow
-        LeadQueueService.AssignmentResult nextResult = LeadQueueService.assignNextAvailableRecord('', '', '', false, null);
+        LeadQueueModels.AssignmentResult nextResult = LeadQueueService.assignNextAvailableRecord('', '', '', false, null);
         
         // Test queue data with various filter combinations
         LeadQueueService.getQueueData('Intake Scheduled', '', '', false);
@@ -1050,12 +1050,12 @@ private class LeadQueueServiceTest {
         Boolean releaseResult = LeadQueueService.releaseUserAssignments(null);
         
         // Test getQueueData with different parameter combinations
-        LeadQueueService.QueueResponse resp1 = LeadQueueService.getQueueData('Questionnaire', '', '', false);
-        LeadQueueService.QueueResponse resp2 = LeadQueueService.getQueueData('', 'MVA', '', false);
-        LeadQueueService.QueueResponse resp3 = LeadQueueService.getQueueData('', '', 'nextWeek', false);
+        LeadQueueModels.QueueResponse resp1 = LeadQueueService.getQueueData('Questionnaire', '', '', false);
+        LeadQueueModels.QueueResponse resp2 = LeadQueueService.getQueueData('', 'MVA', '', false);
+        LeadQueueModels.QueueResponse resp3 = LeadQueueService.getQueueData('', '', 'nextWeek', false);
         
         // Test assignNextAvailableRecord
-        LeadQueueService.AssignmentResult nextAvail = LeadQueueService.assignNextAvailableRecord('', '', '', false, null);
+        LeadQueueModels.AssignmentResult nextAvail = LeadQueueService.assignNextAvailableRecord('', '', '', false, null);
         
         Assert.isNotNull(assignedIds, 'Assigned IDs should not be null');
         Assert.isNotNull(releaseResult, 'Release result should not be null');  
@@ -1097,13 +1097,13 @@ private class LeadQueueServiceTest {
         Test.startTest();
         
         // Test Ready to Call mode with 4-hour filtering
-        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
+        LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
         
         // Verify 4-hour filtering is applied correctly
         Boolean foundOldRecord = false;
         Boolean foundRecentRecord = false;
         
-        for (LeadQueueService.QueueRecord qr : response.records) {
+        for (LeadQueueModels.QueueRecord qr : response.records) {
             if (qr.record.litify_pm__Phone__c == '555-OLD-RECORD') {
                 foundOldRecord = true;
                 // Old record should appear
@@ -1128,17 +1128,17 @@ private class LeadQueueServiceTest {
         Test.startTest();
         
         // Test Ready to Call mode (showScheduledCalls = false) - should use 4-hour filtering
-        LeadQueueService.QueueResponse readyResponse = LeadQueueService.getQueueData('', '', '', false);
+        LeadQueueModels.QueueResponse readyResponse = LeadQueueService.getQueueData('', '', '', false);
         
         // Test Scheduled Calls mode (showScheduledCalls = true) - should show future calls
-        LeadQueueService.QueueResponse scheduledResponse = LeadQueueService.getQueueData('', '', '', true);
+        LeadQueueModels.QueueResponse scheduledResponse = LeadQueueService.getQueueData('', '', '', true);
         
         // Verify different filtering logic is applied
         Assert.isNotNull(readyResponse, 'Ready to call response should not be null');
         Assert.isNotNull(scheduledResponse, 'Scheduled calls response should not be null');
         
         // Verify Ready to Call mode excludes recent Questionnaire records (4-hour filtering)
-        for (LeadQueueService.QueueRecord qr : readyResponse.records) {
+        for (LeadQueueModels.QueueRecord qr : readyResponse.records) {
             if (qr.record.litify_pm__Status__c == 'Questionnaire') {
                 // Questionnaire should only appear if more than 4 hours old
                 Assert.isTrue(qr.record.Call_at_Date__c <= DateTime.now().addHours(-4),
@@ -1160,9 +1160,9 @@ private class LeadQueueServiceTest {
         // Questionnaire/Intake Scheduled use 4-hour filtering
         Test.startTest();
         
-        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
+        LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
         
-        for (LeadQueueService.QueueRecord qr : response.records) {
+        for (LeadQueueModels.QueueRecord qr : response.records) {
             String status = qr.record.litify_pm__Status__c;
             
             if (status == 'Lead Generated' || status == 'In Contact/Under Review' || 
@@ -1194,23 +1194,23 @@ private class LeadQueueServiceTest {
         // Test the case type priority order: Labor Law, MVA, Premises
         Test.startTest();
         
-        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
+        LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData('', '', '', false);
         
         // Verify records are returned
         Assert.isNotNull(response, 'Response should not be null');
         Assert.isNotNull(response.records, 'Records should not be null');
         
         // Test filtering by all new case types to ensure they work
-        LeadQueueService.QueueResponse laborLawResponse = LeadQueueService.getQueueData('', 'Labor Law', '', false);
+        LeadQueueModels.QueueResponse laborLawResponse = LeadQueueService.getQueueData('', 'Labor Law', '', false);
         Assert.isNotNull(laborLawResponse, 'Labor Law filter response should not be null');
         
-        LeadQueueService.QueueResponse mvaResponse = LeadQueueService.getQueueData('', 'MVA', '', false);
+        LeadQueueModels.QueueResponse mvaResponse = LeadQueueService.getQueueData('', 'MVA', '', false);
         Assert.isNotNull(mvaResponse, 'MVA filter response should not be null');
         
-        LeadQueueService.QueueResponse premisesResponse = LeadQueueService.getQueueData('', 'Premises', '', false);
+        LeadQueueModels.QueueResponse premisesResponse = LeadQueueService.getQueueData('', 'Premises', '', false);
         Assert.isNotNull(premisesResponse, 'Premises filter response should not be null');
         
-        LeadQueueService.QueueResponse veteranResponse = LeadQueueService.getQueueData('', 'Veteran Disability', '', false);
+        LeadQueueModels.QueueResponse veteranResponse = LeadQueueService.getQueueData('', 'Veteran Disability', '', false);
         Assert.isNotNull(veteranResponse, 'Veteran Disability filter response should not be null');
         
         // Verify that the filter options include all case types from the priority map
@@ -1221,7 +1221,7 @@ private class LeadQueueServiceTest {
         Set<String> expectedCaseTypes = new Set<String>(LeadQueueConfig.CASE_TYPE_PRIORITY.keySet());
         Set<String> actualCaseTypes = new Set<String>();
         
-        for (LeadQueueService.PicklistOption option : response.filters.caseTypeOptions) {
+        for (LeadQueueModels.PicklistOption option : response.filters.caseTypeOptions) {
             if (String.isNotBlank(option.value)) { // Skip the "All Case Types" option
                 actualCaseTypes.add(option.value);
             }
@@ -1245,7 +1245,7 @@ private class LeadQueueServiceTest {
         
         for (String caseType : caseTypes) {
             try {
-                LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', caseType, '', false);
+                LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData('', caseType, '', false);
                 Assert.isNotNull(response, 'Response should not be null for case type: ' + caseType);
             } catch (Exception e) {
                 Assert.fail('Case type should be valid: ' + caseType + ', Error: ' + e.getMessage());
@@ -1253,19 +1253,19 @@ private class LeadQueueServiceTest {
         }
         
         // Test invalid case type validation with modern structured response
-        LeadQueueService.QueueResponse invalidResponse = LeadQueueService.getQueueData('', 'Invalid Case Type', '', false);
+        LeadQueueModels.QueueResponse invalidResponse = LeadQueueService.getQueueData('', 'Invalid Case Type', '', false);
         Assert.isFalse(invalidResponse.success, 'Invalid case type should return unsuccessful response');
         Assert.isTrue(invalidResponse.errorMessage.contains('Invalid case type filter'), 'Should indicate invalid case type filter');
         Assert.isTrue(invalidResponse.errorMessage.contains('Invalid Case Type'), 'Should include the invalid value');
         Assert.isTrue(invalidResponse.errorMessage.contains('Valid options'), 'Should provide valid options');
         
         // Test invalid status filter
-        LeadQueueService.QueueResponse invalidStatusResponse = LeadQueueService.getQueueData('Invalid Status', '', '', false);
+        LeadQueueModels.QueueResponse invalidStatusResponse = LeadQueueService.getQueueData('Invalid Status', '', '', false);
         Assert.isFalse(invalidStatusResponse.success, 'Invalid status should return unsuccessful response');
         Assert.isTrue(invalidStatusResponse.errorMessage.contains('Invalid status filter'), 'Should indicate invalid status filter');
         
         // Test invalid date filter
-        LeadQueueService.QueueResponse invalidDateResponse = LeadQueueService.getQueueData('', '', 'invalidDate', false);
+        LeadQueueModels.QueueResponse invalidDateResponse = LeadQueueService.getQueueData('', '', 'invalidDate', false);
         Assert.isFalse(invalidDateResponse.success, 'Invalid date filter should return unsuccessful response');
         Assert.isTrue(invalidDateResponse.errorMessage.contains('Invalid date filter'), 'Should indicate invalid date filter');
         
@@ -1275,7 +1275,7 @@ private class LeadQueueServiceTest {
     @IsTest
     static void testQueueAllowsCaseTypeFilter() {
         Test.startTest();
-        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData('', 'MVA', '', false);
+        LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData('', 'MVA', '', false);
         Test.stopTest();
         
         Assert.isNotNull(response, 'Response should not be null when filtering by case type');
@@ -1287,7 +1287,7 @@ private class LeadQueueServiceTest {
         litify_pm__Intake__c wcPiRecord = [SELECT Id FROM litify_pm__Intake__c WHERE Type__c = 'WC & PI' LIMIT 1];
         
         Test.startTest();
-        LeadQueueService.AssignmentResult result = LeadQueueService.assignRecord(wcPiRecord.Id);
+        LeadQueueModels.AssignmentResult result = LeadQueueService.assignRecord(wcPiRecord.Id);
         Test.stopTest();
 
         if (isCacheUnavailable(result)) {
@@ -1303,14 +1303,14 @@ private class LeadQueueServiceTest {
         litify_pm__Intake__c testRecord = [SELECT Id FROM litify_pm__Intake__c LIMIT 1];
         
         Test.startTest();
-        LeadQueueService.AssignmentResult firstAssignment = LeadQueueService.assignRecord(testRecord.Id);
+        LeadQueueModels.AssignmentResult firstAssignment = LeadQueueService.assignRecord(testRecord.Id);
         if (isCacheUnavailable(firstAssignment)) {
             Test.stopTest();
             Assert.isTrue(firstAssignment.message.contains('Platform Cache not configured'), 'Should report missing Platform Cache');
             return;
         }
         LeadQueueService.autoReleaseRecords(new List<Id>{testRecord.Id});
-        LeadQueueService.AssignmentResult secondAssignment = LeadQueueService.assignRecord(testRecord.Id);
+        LeadQueueModels.AssignmentResult secondAssignment = LeadQueueService.assignRecord(testRecord.Id);
         Test.stopTest();
         
         Assert.isTrue(secondAssignment.success, 'Record should be reassignable after auto-release');
@@ -1323,7 +1323,7 @@ private class LeadQueueServiceTest {
         litify_pm__Intake__c testRecord = [SELECT Id FROM litify_pm__Intake__c LIMIT 1];
         
         Test.startTest();
-        LeadQueueService.AssignmentResult result = LeadQueueService.assignRecord(testRecord.Id);
+        LeadQueueModels.AssignmentResult result = LeadQueueService.assignRecord(testRecord.Id);
         Map<String, Long> assignmentData = LeadQueueService.getUserAssignmentData();
         Test.stopTest();
         
@@ -1363,7 +1363,7 @@ private class LeadQueueServiceTest {
         Test.startTest();
 
         // Query queue data - this should not fail with NULL case type
-        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData(
+        LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData(
             '', '', '', false
         );
 
@@ -1375,7 +1375,7 @@ private class LeadQueueServiceTest {
 
         Boolean foundRecord = false;
         // Verify the stored priority score uses the default case type for NULL case type (if found)
-        for (LeadQueueService.QueueRecord qr : response.records) {
+        for (LeadQueueModels.QueueRecord qr : response.records) {
             if (qr.record.Id == testRecord.Id) {
                 foundRecord = true;
                 // Priority should be 18 (Lead Generated=1 * 10 + NULL=8)
@@ -1405,7 +1405,7 @@ private class LeadQueueServiceTest {
         Test.startTest();
 
         // Attempt to assign the record
-        LeadQueueService.AssignmentResult result = LeadQueueService.assignRecord(testRecord.Id);
+        LeadQueueModels.AssignmentResult result = LeadQueueService.assignRecord(testRecord.Id);
 
         Test.stopTest();
 
@@ -1434,7 +1434,7 @@ private class LeadQueueServiceTest {
         Test.startTest();
 
         // Query queue data
-        LeadQueueService.QueueResponse response = LeadQueueService.getQueueData(
+        LeadQueueModels.QueueResponse response = LeadQueueService.getQueueData(
             '', '', '', false
         );
 
@@ -1455,7 +1455,7 @@ private class LeadQueueServiceTest {
             LIMIT 1
         ];
 
-        LeadQueueService.QueueRecord queueRecord = new LeadQueueService.QueueRecord();
+        LeadQueueModels.QueueRecord queueRecord = new LeadQueueModels.QueueRecord();
         queueRecord.record = testRecord;
         queueRecord.recordId = String.valueOf(testRecord.Id);
         queueRecord.displayName = null;
@@ -1473,41 +1473,41 @@ private class LeadQueueServiceTest {
         queueRecord.assignedTo = '';
         queueRecord.assignedTimestamp = null;
 
-        LeadQueueService.QueueStats stats = new LeadQueueService.QueueStats();
-        LeadQueueService.FilterOptions filters = new LeadQueueService.FilterOptions();
-        filters.statusOptions = new List<LeadQueueService.PicklistOption>{
-            new LeadQueueService.PicklistOption('All Statuses', '')
+        LeadQueueModels.QueueStats stats = new LeadQueueModels.QueueStats();
+        LeadQueueModels.FilterOptions filters = new LeadQueueModels.FilterOptions();
+        filters.statusOptions = new List<LeadQueueModels.PicklistOption>{
+            new LeadQueueModels.PicklistOption('All Statuses', '')
         };
-        filters.caseTypeOptions = new List<LeadQueueService.PicklistOption>{
-            new LeadQueueService.PicklistOption('All Case Types', '')
+        filters.caseTypeOptions = new List<LeadQueueModels.PicklistOption>{
+            new LeadQueueModels.PicklistOption('All Case Types', '')
         };
         Map<String, List<String>> tileGroups = new Map<String, List<String>>{
             'highPriority' => new List<String>{'Lead Generated'}
         };
 
-        LeadQueueService.QueueResponse response = new LeadQueueService.QueueResponse(
-            new List<LeadQueueService.QueueRecord>{queueRecord},
+        LeadQueueModels.QueueResponse response = new LeadQueueModels.QueueResponse(
+            new List<LeadQueueModels.QueueRecord>{queueRecord},
             stats,
             filters,
             tileGroups,
             1
         );
 
-        LeadQueueService.QueueResponseCache cache = new LeadQueueService.QueueResponseCache().fromResponse(response);
-        LeadQueueService.QueueResponse restored = cache.toResponse();
+        LeadQueueModels.QueueResponseCache cache = new LeadQueueModels.QueueResponseCache().fromResponse(response);
+        LeadQueueModels.QueueResponse restored = cache.toResponse();
 
         Assert.isTrue(restored.success, 'Restored response should be marked successful');
         Assert.areEqual(1, restored.records.size(), 'Restored response should include one record');
         Assert.areEqual(queueRecord.recordId, restored.records[0].recordId, 'Record id should survive cache round-trip');
         Assert.areEqual(queueRecord.priorityScore, restored.records[0].priorityScore, 'Priority score should survive cache round-trip');
 
-        LeadQueueService.QueueRecordCache emptyCache = new LeadQueueService.QueueRecordCache();
+        LeadQueueModels.QueueRecordCache emptyCache = new LeadQueueModels.QueueRecordCache();
         Assert.isNull(emptyCache.toRecord(), 'Blank cache should return null record');
-        Assert.isNull(new LeadQueueService.QueueRecordCache().fromRecord(null), 'Null record should return null cache');
+        Assert.isNull(new LeadQueueModels.QueueRecordCache().fromRecord(null), 'Null record should return null cache');
 
-        LeadQueueService.QueueResponseCache emptyResponseCache = new LeadQueueService.QueueResponseCache();
+        LeadQueueModels.QueueResponseCache emptyResponseCache = new LeadQueueModels.QueueResponseCache();
         emptyResponseCache.records = null;
-        LeadQueueService.QueueResponse emptyRestored = emptyResponseCache.toResponse();
+        LeadQueueModels.QueueResponse emptyRestored = emptyResponseCache.toResponse();
         Assert.isTrue(emptyRestored.success, 'Empty cache should still return a response');
     }
 
@@ -1549,11 +1549,12 @@ private class LeadQueueServiceTest {
         Assert.areEqual(expectedPriority, updated.Priority_Score__c, 'Priority score should be recalculated');
     }
 
-    private static Boolean isCacheUnavailable(LeadQueueService.AssignmentResult result) {
+    private static Boolean isCacheUnavailable(LeadQueueModels.AssignmentResult result) {
         return result != null
             && !result.success
             && result.message != null
             && result.message.contains('Platform Cache not configured');
     }
 }
+
 
