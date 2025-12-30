@@ -1,14 +1,4 @@
-public with sharing class LeadQueueService {
-    @TestVisible
-    static void resetSimulatedCache() {
-        LeadQueueCacheRepository.resetSimulatedCache();
-    }
-
-    @TestVisible
-    static void enableCacheSimulation(Boolean shouldSimulate) {
-        LeadQueueCacheRepository.enableCacheSimulation(shouldSimulate);
-    }
-
+public with sharing class LeadQueueController {
     @AuraEnabled
     public static LeadQueueModels.QueueResponse getQueueData(String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls) {
         return LeadQueueQueryService.getQueueData(statusFilter, caseTypeFilter, dueDateFilter, showScheduledCalls);
@@ -52,15 +42,5 @@ public with sharing class LeadQueueService {
     @AuraEnabled(cacheable=false)
     public static List<String> getUserAssignedRecordIds() {
         return LeadQueueAssignmentService.getUserAssignedRecordIds();
-    }
-
-    @AuraEnabled
-    public static void autoReleaseRecords(List<Id> recordIds) {
-        LeadQueueAssignmentService.autoReleaseRecords(recordIds);
-    }
-
-    @AuraEnabled
-    public static void handleIntakeFieldChanges(List<litify_pm__Intake__c> newRecords, Map<Id, litify_pm__Intake__c> oldRecordsMap) {
-        LeadQueueAssignmentService.handleIntakeFieldChanges(newRecords, oldRecordsMap);
     }
 }

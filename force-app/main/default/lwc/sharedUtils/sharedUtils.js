@@ -64,12 +64,6 @@ export class SharedUtils {
         return recordId.endsWith('-assigned') ? recordId.slice(0, -9) : recordId;
     }
 
-    static get CONSTANTS() {
-        return {
-            REFRESH_INTERVAL: 30000
-        };
-    }
-
     static get dueDateOptions() {
         return [
             { label: 'All Dates', value: '' },

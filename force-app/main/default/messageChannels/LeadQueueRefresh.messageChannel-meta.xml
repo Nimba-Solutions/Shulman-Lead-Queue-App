@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<LightningMessageChannel xmlns="http://soap.sforce.com/2006/04/metadata">
+    <masterLabel>Lead Queue Refresh</masterLabel>
+    <isExposed>true</isExposed>
+    <description>Cross-tab refresh signals for Lead Queue assignments.</description>
+    <lightningMessageFields>
+        <fieldName>action</fieldName>
+        <description>Assignment action</description>
+    </lightningMessageFields>
+    <lightningMessageFields>
+        <fieldName>originId</fieldName>
+        <description>Sender instance id</description>
+    </lightningMessageFields>
+    <lightningMessageFields>
+        <fieldName>source</fieldName>
+        <description>Sender component</description>
+    </lightningMessageFields>
+    <lightningMessageFields>
+        <fieldName>timestamp</fieldName>
+        <description>Client timestamp</description>
+    </lightningMessageFields>
+</LightningMessageChannel>

@@ -196,14 +196,21 @@ private class LeadQueueServiceTest {
             Assert.isTrue(true, 'Referral Pending status not configured in org');
             return;
         }
+        String referralCaseType = getReferralAllowedCaseTypeForTest();
+        if (String.isBlank(referralCaseType)) {
+            Assert.isTrue(true, 'Referral case types not configured in org');
+            return;
+        }
         litify_pm__Intake__c referralIntake = new litify_pm__Intake__c(
             litify_pm__Status__c = 'Referral Pending',
-            Type__c = 'Personal Injury',
-            Case_Type__c = 'Personal Injury',
+            Type__c = referralCaseType,
             litify_pm__Phone__c = '555-REFERRAL-COUNT',
             litify_pm__Sign_Up_Method__c = 'Office',
             Follow_Up_Date_Time__c = Datetime.now().addHours(-1)
         );
+        if (isCaseTypePicklistValueAvailable(referralCaseType)) {
+            referralIntake.Case_Type__c = referralCaseType;
+        }
         insert referralIntake;
         
         Test.startTest();
@@ -223,6 +230,48 @@ private class LeadQueueServiceTest {
             }
         }
         return false;
+    }
+
+    private static Boolean isCaseTypePicklistValueAvailable(String caseTypeValue) {
+        Schema.DescribeFieldResult describeResult = litify_pm__Intake__c.Case_Type__c.getDescribe();
+        for (Schema.PicklistEntry entry : describeResult.getPicklistValues()) {
+            if (entry.getValue() == caseTypeValue) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String getReferralAllowedCaseTypeForTest() {
+        List<String> allowedCaseTypes = new List<String>{
+            'Worker Compensation',
+            'WC & PI',
+            'Personal Injury'
+        };
+        Set<String> typeValues = getPicklistValues(litify_pm__Intake__c.Type__c);
+        Set<String> caseTypeValues = getPicklistValues(litify_pm__Intake__c.Case_Type__c);
+        for (String allowedValue : allowedCaseTypes) {
+            if (!typeValues.isEmpty() && !typeValues.contains(allowedValue)) {
+                continue;
+            }
+            if (!caseTypeValues.isEmpty() && !caseTypeValues.contains(allowedValue)) {
+                continue;
+            }
+            return allowedValue;
+        }
+        return null;
+    }
+
+    private static Set<String> getPicklistValues(Schema.SObjectField fieldRef) {
+        Schema.DescribeFieldResult describeResult = fieldRef.getDescribe();
+        if (describeResult.getType() != Schema.DisplayType.Picklist) {
+            return new Set<String>();
+        }
+        Set<String> values = new Set<String>();
+        for (Schema.PicklistEntry entry : describeResult.getPicklistValues()) {
+            values.add(entry.getValue());
+        }
+        return values;
     }
     
     @IsTest

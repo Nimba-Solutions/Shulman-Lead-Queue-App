@@ -12,6 +12,30 @@
         <apexClass>LeadQueueService</apexClass>
         <enabled>true</enabled>
     </classAccesses>
+    <classAccesses>
+        <apexClass>LeadQueueController</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
+        <apexClass>LeadQueueAssignmentService</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
+        <apexClass>LeadQueueQueryService</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
+        <apexClass>LeadQueueCacheRepository</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
+        <apexClass>LeadQueueEligibilityService</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
+        <apexClass>LeadQueueModels</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
     <description>Grants access to Lead Queue functionality for standard users</description>
     <fieldPermissions>
         <editable>false</editable>
@@ -83,11 +107,6 @@
         <field>litify_pm__Intake__c.Type__c</field>
         <readable>true</readable>
     </fieldPermissions>
-    <fieldPermissions>
-        <editable>false</editable>
-        <field>LeadQueueRefresh__e.Reason__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
     <hasActivationRequired>false</hasActivationRequired>
     <label>Lead Queue Access</label>
     <objectPermissions>
@@ -98,14 +117,5 @@
         <modifyAllRecords>false</modifyAllRecords>
         <object>litify_pm__Intake__c</object>
         <viewAllRecords>true</viewAllRecords>
-    </objectPermissions>
-    <objectPermissions>
-        <allowCreate>false</allowCreate>
-        <allowDelete>false</allowDelete>
-        <allowEdit>false</allowEdit>
-        <allowRead>true</allowRead>
-        <modifyAllRecords>false</modifyAllRecords>
-        <object>LeadQueueRefresh__e</object>
-        <viewAllRecords>false</viewAllRecords>
     </objectPermissions>
 </PermissionSet>
