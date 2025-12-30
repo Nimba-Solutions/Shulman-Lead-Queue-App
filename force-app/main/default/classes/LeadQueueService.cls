@@ -18,6 +18,11 @@ public with sharing class LeadQueueService {
         'SSD',
         'Civil Rights'
     };
+    private static final Set<String> REFERRAL_ALLOWED_CASE_TYPES = new Set<String>{
+        'Worker Compensation',
+        'WC & PI',
+        'Personal Injury'
+    };
     
     private static final Integer ASSIGNMENT_TTL = 1800; // 30 minutes
     private static final String CACHE_PARTITION = 'local.LeadQueueCache';
@@ -165,11 +170,11 @@ public with sharing class LeadQueueService {
     
     @AuraEnabled
     public static QueueResponse getQueueData(String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls) {
-        return getQueueDataPaged(statusFilter, caseTypeFilter, dueDateFilter, showScheduledCalls, null, null, null);
+        return getQueueDataPaged(statusFilter, caseTypeFilter, dueDateFilter, showScheduledCalls, null, null, null, false);
     }
 
     @AuraEnabled
-    public static QueueResponse getQueueDataPaged(String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls, Integer pageNumber, Integer pageSize, String tileFilter) {
+    public static QueueResponse getQueueDataPaged(String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls, Integer pageNumber, Integer pageSize, String tileFilter, Boolean bypassCache) {
         try {
             // Security validation
             if (!Schema.sObjectType.litify_pm__Intake__c.isAccessible()) {
@@ -193,9 +198,11 @@ public with sharing class LeadQueueService {
             Integer safePageSize = normalizePageSize(pageSize);
             Integer offset = (safePageNumber - 1) * safePageSize;
             String cacheKey = buildQueueCacheKey(statusFilter, caseTypeFilter, dueDateFilter, showScheduledCalls, safePageNumber, safePageSize, tileFilter);
-            QueueResponse cached = getCachedQueueResponse(cacheKey);
-            if (cached != null) {
-                return cached;
+            if (bypassCache != true) {
+                QueueResponse cached = getCachedQueueResponse(cacheKey);
+                if (cached != null) {
+                    return cached;
+                }
             }
             
             // Execute business logic
@@ -322,6 +329,7 @@ public with sharing class LeadQueueService {
                 simulatedRecordAssignments.put(recordId, userId);
                 simulatedUserAssignments.put(userId, recordId);
                 simulatedAssignmentTimestamps.put(recordId, assignedAt);
+                LeadQueueRefreshPublisher.publish('assign');
                 return new AssignmentResult(true, 'Record assigned successfully');
             }
             
@@ -338,6 +346,7 @@ public with sharing class LeadQueueService {
             };
             orgCache.put(ASSIGNMENT_CACHE_PREFIX + recordId, JSON.serialize(assignmentData), ASSIGNMENT_TTL);
             orgCache.put(USER_CACHE_PREFIX + userId, recordId, ASSIGNMENT_TTL);
+            LeadQueueRefreshPublisher.publish('assign');
             return new AssignmentResult(true, 'Record assigned successfully');
             
         } catch (Exception e) {
@@ -347,19 +356,43 @@ public with sharing class LeadQueueService {
     }
     
     @AuraEnabled
-    public static Boolean releaseUserAssignments() {
+    public static Boolean releaseUserAssignments(String recordId) {
         try {
             String userId = UserInfo.getUserId();
             Cache.OrgPartition orgCache = getCachePartition();
             Boolean useSimulatedCache = orgCache == null && isSimulatedCacheActive();
+            Boolean released = false;
+            String normalizedRecordId = null;
+
+            if (String.isNotBlank(recordId)) {
+                String trimmedRecordId = recordId.trim();
+                if (trimmedRecordId.endsWith('-assigned')) {
+                    trimmedRecordId = trimmedRecordId.substring(0, trimmedRecordId.length() - 9);
+                }
+                if (isValidSalesforceId(trimmedRecordId)) {
+                    normalizedRecordId = trimmedRecordId;
+                }
+            }
             
             if (useSimulatedCache) {
                 String assignedRecord = simulatedUserAssignments.get(userId);
                 if (assignedRecord != null) {
                     simulatedRecordAssignments.remove(assignedRecord);
                     simulatedAssignmentTimestamps.remove(assignedRecord);
+                    released = true;
                 }
                 simulatedUserAssignments.remove(userId);
+                if (!released && normalizedRecordId != null) {
+                    String assignedUserId = simulatedRecordAssignments.get(normalizedRecordId);
+                    if (assignedUserId == userId) {
+                        simulatedRecordAssignments.remove(normalizedRecordId);
+                        simulatedAssignmentTimestamps.remove(normalizedRecordId);
+                        released = true;
+                    }
+                }
+                if (released) {
+                    LeadQueueRefreshPublisher.publish('release');
+                }
                 return true;
             }
             
@@ -368,10 +401,22 @@ public with sharing class LeadQueueService {
                 
                 if (assignedRecord != null) {
                     orgCache.remove(ASSIGNMENT_CACHE_PREFIX + assignedRecord);
+                    released = true;
                 }
                 orgCache.remove(USER_CACHE_PREFIX + userId);
+                if (!released && normalizedRecordId != null) {
+                    Map<String, Object> assignmentData = getAssignmentData(normalizedRecordId);
+                    String assignedUserId = assignmentData != null ? (String) assignmentData.get('userId') : null;
+                    if (assignedUserId == userId) {
+                        orgCache.remove(ASSIGNMENT_CACHE_PREFIX + normalizedRecordId);
+                        released = true;
+                    }
+                }
             }
             
+            if (released) {
+                LeadQueueRefreshPublisher.publish('release');
+            }
             return true;
             
         } catch (Exception e) {
@@ -451,6 +496,7 @@ public with sharing class LeadQueueService {
         try {
             Cache.OrgPartition orgCache = getCachePartition();
             Boolean useSimulatedCache = orgCache == null && isSimulatedCacheActive();
+            Boolean didRelease = false;
             if (orgCache == null && !useSimulatedCache) {
                 LeadQueueLogging.debug('LeadQueueService.autoReleaseRecords: Platform Cache unavailable - assignment tracking limited for ' + recordIds.size() + ' records');
                 return;
@@ -463,7 +509,11 @@ public with sharing class LeadQueueService {
                     if (!String.isBlank(assignedUserId)) {
                         simulatedUserAssignments.remove(assignedUserId);
                         LeadQueueLogging.debug('Auto-released record (simulated cache): ' + recordId + ' from user: ' + assignedUserId);
+                        didRelease = true;
                     }
+                }
+                if (didRelease) {
+                    LeadQueueRefreshPublisher.publish('auto-release');
                 }
                 return;
             }
@@ -479,6 +529,7 @@ public with sharing class LeadQueueService {
                     } catch (Exception parseError) {
                         LeadQueueLogging.debug('Auto-release parse error for record ' + recordId + ': ' + parseError.getMessage());
                     }
+                    didRelease = true;
                 }
 
                 orgCache.remove(ASSIGNMENT_CACHE_PREFIX + recordId);
@@ -487,6 +538,9 @@ public with sharing class LeadQueueService {
                     orgCache.remove(USER_CACHE_PREFIX + assignedUserId);
                     LeadQueueLogging.debug('Auto-released record: ' + recordId + ' from user: ' + assignedUserId);
                 }
+            }
+            if (didRelease) {
+                LeadQueueRefreshPublisher.publish('auto-release');
             }
         } catch (Exception e) {
             LeadQueueLogging.debug('Auto-release error: ' + e.getMessage());
@@ -608,9 +662,18 @@ public with sharing class LeadQueueService {
         bindVars.put('allowedCaseTypes', new List<String>(allowedCaseTypes));
     }
 
+    private static void addReferralCaseTypeCondition(List<String> conditions, Map<String, Object> bindVars) {
+        if (REFERRAL_ALLOWED_CASE_TYPES == null || REFERRAL_ALLOWED_CASE_TYPES.isEmpty()) {
+            return;
+        }
+        conditions.add('(litify_pm__Status__c != \'Referral Pending\' OR Queue_Case_Type__c IN :referralCaseTypes)');
+        bindVars.put('referralCaseTypes', new List<String>(REFERRAL_ALLOWED_CASE_TYPES));
+    }
+
     private static List<String> buildFilterConditions(String statusFilter, String caseTypeFilter, String dueDateFilter, String tileFilter, Map<String, Object> bindVars) {
         List<String> conditions = new List<String>();
         addQueueCaseTypeEligibilityCondition(conditions, bindVars);
+        addReferralCaseTypeCondition(conditions, bindVars);
         if (String.isNotBlank(statusFilter)) {
             conditions.add('litify_pm__Status__c = :statusFilter');
             bindVars.put('statusFilter', statusFilter);
@@ -716,6 +779,13 @@ public with sharing class LeadQueueService {
     }
     
     private static Boolean isValidQueueRecord(litify_pm__Intake__c record) {
+        if (record == null) {
+            return false;
+        }
+        if (record.litify_pm__Status__c == 'Referral Pending'
+            && !REFERRAL_ALLOWED_CASE_TYPES.contains(record.Queue_Case_Type__c)) {
+            return false;
+        }
         return record.Call_at_Date__c != null
             && String.isNotBlank(record.litify_pm__Status__c)
             && getAllQueueStatuses().contains(record.litify_pm__Status__c)

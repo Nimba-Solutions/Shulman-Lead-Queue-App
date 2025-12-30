@@ -2,6 +2,7 @@ import { LightningElement, api, track, wire } from 'lwc';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import { NavigationMixin } from 'lightning/navigation';
 import { IsConsoleNavigation } from 'lightning/platformWorkspaceApi';
+import { subscribe, unsubscribe, onError } from 'lightning/empApi';
 // Removed refreshApex import - pure LWC approach without Aura compatibility layer
 import Id from '@salesforce/user/Id';
 import getQueueDataPaged from '@salesforce/apex/LeadQueueService.getQueueDataPaged';
@@ -62,13 +63,15 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     pageSize = 50;
     listTotalRecords = 0;
     
-    refreshInterval;
     timerInterval;
     // Removed wiredQueueResult - pure LWC approach without Aura compatibility layer
     filterTimeout;
     filterRequestId = 0;
     hasInitialLoadCompleted = false;
     isAutoClearingInvalidStatus = false;
+    eventChannel = '/event/LeadQueueRefresh__e';
+    empSubscription;
+    eventRefreshTimeout;
     
     // Console navigation detection
     @wire(IsConsoleNavigation) isConsoleNavigation;
@@ -83,7 +86,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     
     // Replace @wire with imperative calls to eliminate Aura compatibility layer
     async loadQueueData(options = {}) {
-        const { useSoftRefresh = false } = options;
+        const { useSoftRefresh = false, bypassCache = false } = options;
         this.filterRequestId++;
         const currentRequestId = this.filterRequestId;
         const shouldShowSpinner = !useSoftRefresh || !this.hasInitialLoadCompleted;
@@ -98,7 +101,8 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
                 showScheduledCalls: this.showScheduledCalls,
                 pageNumber: this.currentPage,
                 pageSize: this.pageSize,
-                tileFilter: this.activeTileFilter
+                tileFilter: this.activeTileFilter,
+                bypassCache
             });
             
             // Only process if this is still the most recent request
@@ -159,6 +163,10 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     // Workspace pre-warming now handled by ConsoleNavigationManager
     
     // Resource preloading now handled by ConsoleNavigationManager
+
+    refreshQueueData(options = {}) {
+        return this.loadQueueData(options);
+    }
     
     async checkCacheHealth() {
         try {
@@ -194,6 +202,31 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         this.userAssignmentTimestamps = {};
         this.assignedRecordSummary = null;
     }
+
+    clearAssignmentForRecord(recordId) {
+        if (!recordId) {
+            return;
+        }
+        const normalizedId = SharedUtils.normalizeRecordId(recordId);
+        const clearAssignment = (record) => {
+            if (!record || SharedUtils.normalizeRecordId(record.Id) !== normalizedId) {
+                return record;
+            }
+            return {
+                ...record,
+                Id: normalizedId,
+                assignedTo: '',
+                assignmentTimer: '',
+                assignmentTimestamp: null
+            };
+        };
+        if (Array.isArray(this.records)) {
+            this.records = this.records.map(clearAssignment);
+        }
+        if (Array.isArray(this.originalRecords)) {
+            this.originalRecords = this.originalRecords.map(clearAssignment);
+        }
+    }
     
     connectedCallback() {
         // Initialize utility managers
@@ -201,10 +234,6 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         this.timerManager = new TimerManager(this);
         this.dataProcessor = new DataProcessor(this);
 
-        // Clear any existing interval before setting new one
-        if (this.refreshInterval) {
-            clearInterval(this.refreshInterval);
-        }
         if (this.timerInterval) {
             clearInterval(this.timerInterval);
             this.timerInterval = null;
@@ -212,6 +241,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         
         // Console app warm-up optimizations
         this.consoleNavigation.warmUpConsoleApp();
+        this.subscribeToRefreshEvents();
         this.checkCacheHealth()
             .then(() => {
                 this.loadQueueData();
@@ -226,25 +256,10 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         
         // Start live timer updates AFTER initial data load
         this.timerManager.startTimerUpdates();
-        
-        this.refreshInterval = setInterval(() => {
-            this.checkCacheHealth();
-            this.handleRefresh();
-            if (this.isCacheReady) {
-                this.checkUserAssignments();
-            } else {
-                this.clearAssignmentsState(true);
-            }
-        }, SharedUtils.CONSTANTS.REFRESH_INTERVAL);
     }
 
     disconnectedCallback() {
         // More robust cleanup to prevent memory leaks
-        if (this.refreshInterval) {
-            clearInterval(this.refreshInterval);
-            this.refreshInterval = null;
-        }
-        
         // Stop timer updates
         if (this.timerManager) {
             this.timerManager.stopTimerUpdates();
@@ -254,6 +269,13 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
             clearTimeout(this.filterTimeout);
             this.filterTimeout = null;
         }
+
+        if (this.eventRefreshTimeout) {
+            clearTimeout(this.eventRefreshTimeout);
+            this.eventRefreshTimeout = null;
+        }
+
+        this.unsubscribeFromRefreshEvents();
         
         // Enhanced cleanup to prevent memory leaks
         this.filterRequestId = 0;
@@ -278,6 +300,47 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         this.timerManager = null;
         this.dataProcessor = null;
     }
+
+    async subscribeToRefreshEvents() {
+        if (this.empSubscription) {
+            return;
+        }
+        try {
+            this.empSubscription = await subscribe(this.eventChannel, -1, () => {
+                this.scheduleEventRefresh();
+            });
+        } catch (error) {
+            console.error('Failed to subscribe to Lead Queue refresh events:', error);
+        }
+
+        onError((error) => {
+            console.error('Lead Queue refresh event error:', error);
+        });
+    }
+
+    unsubscribeFromRefreshEvents() {
+        if (!this.empSubscription) {
+            return;
+        }
+        unsubscribe(this.empSubscription, () => {
+            this.empSubscription = null;
+        });
+    }
+
+    scheduleEventRefresh() {
+        if (this.eventRefreshTimeout) {
+            return;
+        }
+        this.eventRefreshTimeout = setTimeout(() => {
+            this.eventRefreshTimeout = null;
+            this.refreshQueueData({ useSoftRefresh: true, bypassCache: true });
+            if (this.isCacheReady) {
+                this.checkUserAssignments();
+            } else {
+                this.clearAssignmentsState(true);
+            }
+        }, 500);
+    }
     
     processQueueResponse(data) {
         if (this.dataProcessor) {
@@ -301,9 +364,8 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
     
     
     async handleRefresh(event) {
-        // Use a soft refresh when invoked by background timers (no event payload)
         const useSoftRefresh = !event;
-        await this.loadQueueData({ useSoftRefresh });
+        await this.refreshQueueData({ useSoftRefresh, bypassCache: true });
     }
     
     async handleAssignNext() {
@@ -331,7 +393,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
                 
                 // Refresh data and assignments in parallel (pure LWC approach)
                 Promise.all([
-                    this.loadQueueData({ useSoftRefresh: true }),
+                    this.refreshQueueData({ useSoftRefresh: true, bypassCache: true }),
                     this.checkUserAssignments()
                 ]).then(() => {
                     // Force re-render of utility interface
@@ -386,7 +448,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
                 
                 // Refresh data and assignments in parallel (pure LWC approach)
                 Promise.all([
-                    this.loadQueueData({ useSoftRefresh: true }),
+                    this.refreshQueueData({ useSoftRefresh: true, bypassCache: true }),
                     this.checkUserAssignments()
                 ]).then(() => {
                     // Force re-render of utility interface
@@ -411,14 +473,18 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         }
         this.isReleasing = true;
         try {
-            await releaseUserAssignments();
+            const releasedRecordId = this.assignedRecordId;
+            await releaseUserAssignments({ recordId: releasedRecordId });
             this.showToast('Success', 'Released all assignments', 'success');
-            this.hasAssignments = false;
+            this.clearAssignmentsState();
+            if (releasedRecordId) {
+                this.clearAssignmentForRecord(releasedRecordId);
+            }
             
             // Assignment cleanup handled by server Platform Cache
             
             await Promise.all([
-                this.loadQueueData(),
+                this.refreshQueueData({ bypassCache: true }),
                 this.checkUserAssignments()
             ]);
             // Force re-render of utility interface

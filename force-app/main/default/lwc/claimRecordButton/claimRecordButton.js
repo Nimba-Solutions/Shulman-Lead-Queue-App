@@ -1,6 +1,7 @@
 import { LightningElement, api } from 'lwc';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import { NavigationMixin } from 'lightning/navigation';
+import { subscribe, unsubscribe, onError } from 'lightning/empApi';
 import assignRecord from '@salesforce/apex/LeadQueueService.assignRecord';
 import releaseUserAssignments from '@salesforce/apex/LeadQueueService.releaseUserAssignments';
 import getUserAssignedRecordIds from '@salesforce/apex/LeadQueueService.getUserAssignedRecordIds';
@@ -14,27 +15,66 @@ export default class ClaimRecordButton extends NavigationMixin(LightningElement)
     showSuccess = false;
     assignedRecordIds = [];
     isCacheReady = true;
+    eventChannel = '/event/LeadQueueRefresh__e';
+    empSubscription;
+    eventRefreshTimeout;
 
     // Check assignments on component load
     connectedCallback() {
+        this.subscribeToRefreshEvents();
         this.checkCacheHealth();
         this.checkAssignments();
-        // Set up periodic refresh to sync with platform cache
-        this.assignmentCheckInterval = setInterval(() => {
-            this.checkAssignments();
-        }, 5000); // Check every 5 seconds
-        this.cacheHealthInterval = setInterval(() => {
-            this.checkCacheHealth();
-        }, 30000);
     }
 
     disconnectedCallback() {
-        if (this.assignmentCheckInterval) {
-            clearInterval(this.assignmentCheckInterval);
+        if (this.eventRefreshTimeout) {
+            clearTimeout(this.eventRefreshTimeout);
+            this.eventRefreshTimeout = null;
         }
-        if (this.cacheHealthInterval) {
-            clearInterval(this.cacheHealthInterval);
+        this.unsubscribeFromRefreshEvents();
+    }
+
+    async subscribeToRefreshEvents() {
+        if (this.empSubscription) {
+            return;
         }
+        try {
+            this.empSubscription = await subscribe(this.eventChannel, -1, () => {
+                this.scheduleEventRefresh();
+            });
+        } catch (error) {
+            console.error('Failed to subscribe to Lead Queue refresh events:', error);
+        }
+
+        onError((error) => {
+            console.error('Lead Queue refresh event error:', error);
+        });
+    }
+
+    unsubscribeFromRefreshEvents() {
+        if (!this.empSubscription) {
+            return;
+        }
+        unsubscribe(this.empSubscription, () => {
+            this.empSubscription = null;
+        });
+    }
+
+    scheduleEventRefresh() {
+        if (this.eventRefreshTimeout) {
+            return;
+        }
+        this.eventRefreshTimeout = setTimeout(async () => {
+            this.eventRefreshTimeout = null;
+            if (!this.isCacheReady) {
+                await this.checkCacheHealth();
+            }
+            if (this.isCacheReady) {
+                this.checkAssignments();
+            } else {
+                this.assignedRecordIds = [];
+            }
+        }, 500);
     }
 
     async checkCacheHealth() {
@@ -131,7 +171,7 @@ export default class ClaimRecordButton extends NavigationMixin(LightningElement)
         }
         this.isReleasing = true;
         try {
-            await releaseUserAssignments();
+            await releaseUserAssignments({ recordId: this.recordId });
             this.showSuccess = true;
             this.showToast('Success', 'Record released successfully', 'success');
             // Refresh assignments to update button state

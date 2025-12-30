@@ -199,7 +199,7 @@ private class LeadQueueServiceTest {
         litify_pm__Intake__c referralIntake = new litify_pm__Intake__c(
             litify_pm__Status__c = 'Referral Pending',
             Type__c = 'Personal Injury',
-            Case_Type__c = 'MVA',
+            Case_Type__c = 'Personal Injury',
             litify_pm__Phone__c = '555-REFERRAL-COUNT',
             litify_pm__Sign_Up_Method__c = 'Office',
             Follow_Up_Date_Time__c = Datetime.now().addHours(-1)
@@ -244,7 +244,7 @@ private class LeadQueueServiceTest {
     @IsTest
     static void testReleaseAssignments() {
         Test.startTest();
-        Boolean result = LeadQueueService.releaseUserAssignments();
+        Boolean result = LeadQueueService.releaseUserAssignments(null);
         Test.stopTest();
         
         Assert.isTrue(result, 'Release should succeed');
@@ -355,7 +355,7 @@ private class LeadQueueServiceTest {
         // Test assignment creates cache entry (or handles cache unavailability)
         LeadQueueService.AssignmentResult result = LeadQueueService.assignRecord(testRecord.Id);
         List<String> assignedIds = LeadQueueService.getUserAssignedRecordIds();
-        Boolean releaseResult = LeadQueueService.releaseUserAssignments();
+        Boolean releaseResult = LeadQueueService.releaseUserAssignments(null);
         Assert.isTrue(releaseResult, 'Release should succeed');
         Test.stopTest();
 
@@ -868,7 +868,7 @@ private class LeadQueueServiceTest {
         // Test complete assignment workflow
         LeadQueueService.AssignmentResult assignResult = LeadQueueService.assignRecord(recordId);
         List<String> userAssigned = LeadQueueService.getUserAssignedRecordIds();
-        Boolean releaseResult = LeadQueueService.releaseUserAssignments();
+        Boolean releaseResult = LeadQueueService.releaseUserAssignments(null);
         
         // Test next available assignment workflow
         LeadQueueService.AssignmentResult nextResult = LeadQueueService.assignNextAvailableRecord('', '', '', false, null);
@@ -1047,7 +1047,7 @@ private class LeadQueueServiceTest {
         
         // Simple additional test calls to cover any missed lines
         List<String> assignedIds = LeadQueueService.getUserAssignedRecordIds();
-        Boolean releaseResult = LeadQueueService.releaseUserAssignments();
+        Boolean releaseResult = LeadQueueService.releaseUserAssignments(null);
         
         // Test getQueueData with different parameter combinations
         LeadQueueService.QueueResponse resp1 = LeadQueueService.getQueueData('Questionnaire', '', '', false);
@@ -1338,7 +1338,7 @@ private class LeadQueueServiceTest {
         Assert.isNotNull(assignedAt, 'Assignment timestamp should be populated');
         
         // Cleanup to avoid impacting subsequent tests
-        LeadQueueService.releaseUserAssignments();
+        LeadQueueService.releaseUserAssignments(null);
     }
 
     @IsTest
