@@ -359,37 +359,6 @@ public with sharing class LeadQueueQueryService {
         return qr;
     }
 
-    private static LeadQueueModels.QueueStats calculateStats(List<LeadQueueModels.QueueRecord> records) {
-        LeadQueueModels.QueueStats stats = new LeadQueueModels.QueueStats();
-        stats.totalRecords = records.size();
-
-        for (LeadQueueModels.QueueRecord record : records) {
-            String status = record.record.litify_pm__Status__c;
-
-            if (isStatusInGroup('highPriority', status)) {
-                stats.highPriorityCount++;
-            }
-
-            if (isStatusInGroup('inContact', status)) {
-                stats.inContactCount++;
-            }
-
-            if (isStatusInGroup('noContact', status)) {
-                stats.noContactCount++;
-            }
-
-            if (isStatusInGroup('retainerSent', status)) {
-                stats.retainerSentCount++;
-            }
-
-            if (isStatusInGroup('referrals', status)) {
-                stats.referralCount++;
-            }
-        }
-
-        return stats;
-    }
-
     private static LeadQueueModels.QueueStats calculateStatsForFilters(String statusFilter, String caseTypeFilter, String dueDateFilter, Boolean showScheduledCalls) {
         LeadQueueModels.QueueStats stats = new LeadQueueModels.QueueStats();
         Boolean allowFutureWindow = 'nextWeek'.equalsIgnoreCase(dueDateFilter);

@@ -149,14 +149,32 @@ export class TimerManager {
         }
     }
 
+    shouldRunTimer() {
+        if (this.component.hasAssignments) {
+            return true;
+        }
+        const records = this.component.records || [];
+        return records.some(record => record && record.assignedTo);
+    }
+
+    updateTimerState() {
+        if (this.shouldRunTimer()) {
+            this.startTimerUpdates();
+        } else {
+            this.stopTimerUpdates();
+        }
+    }
+
     /**
      * Start timer interval for real-time updates
      */
     startTimerUpdates() {
-        // Clear any existing timer interval
+        if (!this.shouldRunTimer()) {
+            this.stopTimerUpdates();
+            return;
+        }
         if (this.component.timerInterval) {
-            clearInterval(this.component.timerInterval);
-            this.component.timerInterval = null;
+            return;
         }
 
         // Initialize current time immediately

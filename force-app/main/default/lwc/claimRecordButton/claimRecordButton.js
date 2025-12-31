@@ -4,6 +4,7 @@ import { NavigationMixin } from 'lightning/navigation';
 import { subscribe as empSubscribe, unsubscribe as empUnsubscribe, onError } from 'lightning/empApi';
 import { publish, subscribe as lmsSubscribe, unsubscribe as lmsUnsubscribe, MessageContext, APPLICATION_SCOPE } from 'lightning/messageService';
 import LEAD_QUEUE_REFRESH from '@salesforce/messageChannel/LeadQueueRefresh__c';
+import { CDC_RELEVANT_FIELDS, buildRefreshPayload } from 'c/leadQueueRefreshConfig';
 import {
     assignRecord,
     releaseUserAssignments,
@@ -11,6 +12,8 @@ import {
     isCacheConfigured
 } from 'c/leadQueueApi';
 import { SharedUtils } from 'c/sharedUtils';
+
+let hasRegisteredEmpErrorHandler = false;
 
 export default class ClaimRecordButton extends NavigationMixin(LightningElement) {
     @api recordId;
@@ -20,23 +23,7 @@ export default class ClaimRecordButton extends NavigationMixin(LightningElement)
     assignedRecordIds = [];
     isCacheReady = true;
     cdcChannel = '/data/litify_pm__Intake__ChangeEvent';
-    cdcRelevantFields = new Set([
-        'litify_pm__Status__c',
-        'Priority_Score__c',
-        'Queue_Case_Type__c',
-        'Case_Type__c',
-        'Type__c',
-        'Call_at_Date__c',
-        'Follow_Up_Date_Time__c',
-        'Appointment_Date__c',
-        'litify_pm__Sign_Up_Method__c',
-        'Qualification_Status__c',
-        'Test_Record__c',
-        'litify_pm__Display_Name__c',
-        'Referred_By_Name__c',
-        'litify_pm__Phone__c',
-        'Name'
-    ]);
+    cdcRelevantFields = new Set(CDC_RELEVANT_FIELDS);
     empSubscription;
     eventRefreshTimeout;
     lmsSubscription;
@@ -88,9 +75,12 @@ export default class ClaimRecordButton extends NavigationMixin(LightningElement)
             console.error('Failed to subscribe to Lead Queue CDC events:', error);
         }
 
-        onError((error) => {
-            console.error('Lead Queue CDC error:', error);
-        });
+        if (!hasRegisteredEmpErrorHandler) {
+            onError((error) => {
+                console.error('Lead Queue CDC error:', error);
+            });
+            hasRegisteredEmpErrorHandler = true;
+        }
     }
 
     unsubscribeFromRefreshEvents() {
@@ -144,18 +134,18 @@ export default class ClaimRecordButton extends NavigationMixin(LightningElement)
     }
 
     publishLmsMessage(action) {
-        if (!this.messageContext) {
-            this.publishStorageMessage(action);
-            return;
-        }
-        publish(this.messageContext, LEAD_QUEUE_REFRESH, {
+        const payload = buildRefreshPayload({
             action,
             originId: this.lmsOriginId,
-            source: 'claimRecordButton',
-            timestamp: Date.now()
+            source: 'claimRecordButton'
         });
-        this.publishBroadcastMessage(action);
-        this.publishStorageMessage(action);
+        if (!this.messageContext) {
+            this.publishStorageMessage(payload);
+            return;
+        }
+        publish(this.messageContext, LEAD_QUEUE_REFRESH, payload);
+        this.publishBroadcastMessage(payload);
+        this.publishStorageMessage(payload);
     }
 
     registerStorageListener() {
@@ -172,17 +162,11 @@ export default class ClaimRecordButton extends NavigationMixin(LightningElement)
         window.removeEventListener('storage', this.storageListener);
     }
 
-    publishStorageMessage(action) {
-        if (typeof window === 'undefined' || !window.localStorage) {
+    publishStorageMessage(payload) {
+        if (!payload || typeof window === 'undefined' || !window.localStorage) {
             return;
         }
         try {
-            const payload = {
-                action,
-                originId: this.lmsOriginId,
-                source: 'claimRecordButton',
-                timestamp: Date.now()
-            };
             window.localStorage.setItem(this.storageKey, JSON.stringify(payload));
         } catch (error) {
             // Ignore storage errors to avoid blocking UI actions.
@@ -231,17 +215,12 @@ export default class ClaimRecordButton extends NavigationMixin(LightningElement)
         this.broadcastChannel = null;
     }
 
-    publishBroadcastMessage(action) {
-        if (!this.broadcastChannel) {
+    publishBroadcastMessage(payload) {
+        if (!this.broadcastChannel || !payload) {
             return;
         }
         try {
-            this.broadcastChannel.postMessage({
-                action,
-                originId: this.lmsOriginId,
-                source: 'claimRecordButton',
-                timestamp: Date.now()
-            });
+            this.broadcastChannel.postMessage(payload);
         } catch (error) {
             // Ignore broadcast errors to avoid blocking UI actions.
         }
@@ -370,10 +349,14 @@ export default class ClaimRecordButton extends NavigationMixin(LightningElement)
         }
         this.isReleasing = true;
         try {
-            await releaseUserAssignments({ recordId: this.recordId });
-            this.showSuccess = true;
-            this.showToast('Success', 'Record released successfully', 'success');
-            this.publishLmsMessage('release');
+            const released = await releaseUserAssignments({ recordId: this.recordId });
+            this.showSuccess = released;
+            if (released) {
+                this.showToast('Success', 'Record released successfully', 'success');
+                this.publishLmsMessage('release');
+            } else {
+                this.showToast('Info', 'No active assignment to release', 'info');
+            }
             // Refresh assignments to update button state
             await this.refreshAssignments();
             // Clear success message after 3 seconds

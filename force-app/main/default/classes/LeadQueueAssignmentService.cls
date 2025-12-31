@@ -108,7 +108,7 @@ public with sharing class LeadQueueAssignmentService {
                 }
             }
 
-            return true;
+            return released;
 
         } catch (Exception e) {
             LeadQueueLogging.debug('Release assignments error: ' + e.getMessage());

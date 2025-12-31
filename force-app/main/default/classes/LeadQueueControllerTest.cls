@@ -50,7 +50,7 @@ private class LeadQueueControllerTest {
 
         Assert.isFalse(invalidAssign.success, 'Invalid record ID should fail assignment');
         Assert.isTrue(invalidAssign.message.contains('Invalid record ID format'), 'Should indicate invalid ID format');
-        Assert.isTrue(releaseResult, 'Release should return true');
+        Assert.isNotNull(releaseResult, 'Release should return a value');
         Assert.isNotNull(assignmentData, 'Assignment data should not be null');
         Assert.isNotNull(assignedIds, 'Assigned IDs should not be null');
         Assert.isNull(summary, 'Invalid record summary should return null');

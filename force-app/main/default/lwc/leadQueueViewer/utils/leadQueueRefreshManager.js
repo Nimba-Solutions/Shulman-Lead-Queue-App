@@ -1,6 +1,7 @@
 import { subscribe as empSubscribe, unsubscribe as empUnsubscribe, onError } from 'lightning/empApi';
 import { publish, subscribe as lmsSubscribe, unsubscribe as lmsUnsubscribe, APPLICATION_SCOPE } from 'lightning/messageService';
 import LEAD_QUEUE_REFRESH from '@salesforce/messageChannel/LeadQueueRefresh__c';
+import { CDC_RELEVANT_FIELDS, buildRefreshPayload } from 'c/leadQueueRefreshConfig';
 
 export class LeadQueueRefreshManager {
     constructor(component, options = {}) {
@@ -8,23 +9,7 @@ export class LeadQueueRefreshManager {
         this.messageContext = options.messageContext || null;
         this.onRefresh = options.onRefresh || null;
         this.cdcChannel = options.cdcChannel || '/data/litify_pm__Intake__ChangeEvent';
-        this.cdcRelevantFields = options.cdcRelevantFields || new Set([
-            'litify_pm__Status__c',
-            'Priority_Score__c',
-            'Queue_Case_Type__c',
-            'Case_Type__c',
-            'Type__c',
-            'Call_at_Date__c',
-            'Follow_Up_Date_Time__c',
-            'Appointment_Date__c',
-            'litify_pm__Sign_Up_Method__c',
-            'Qualification_Status__c',
-            'Test_Record__c',
-            'litify_pm__Display_Name__c',
-            'Referred_By_Name__c',
-            'litify_pm__Phone__c',
-            'Name'
-        ]);
+        this.cdcRelevantFields = options.cdcRelevantFields || new Set(CDC_RELEVANT_FIELDS);
         this.empSubscription = null;
         this.lmsSubscription = null;
         this.eventRefreshTimeout = null;
@@ -64,18 +49,18 @@ export class LeadQueueRefreshManager {
     }
 
     publish(action) {
-        if (!this.messageContext) {
-            this.publishToStorage(action);
-            return;
-        }
-        publish(this.messageContext, LEAD_QUEUE_REFRESH, {
+        const payload = buildRefreshPayload({
             action,
             originId: this.lmsOriginId,
-            source: 'leadQueueViewer',
-            timestamp: Date.now()
+            source: 'leadQueueViewer'
         });
-        this.publishToBroadcast(action);
-        this.publishToStorage(action);
+        if (!this.messageContext) {
+            this.publishToStorage(payload);
+            return;
+        }
+        publish(this.messageContext, LEAD_QUEUE_REFRESH, payload);
+        this.publishToBroadcast(payload);
+        this.publishToStorage(payload);
     }
 
     subscribeToRefreshEvents() {
@@ -178,17 +163,11 @@ export class LeadQueueRefreshManager {
         window.removeEventListener('storage', this.storageListener);
     }
 
-    publishToStorage(action) {
-        if (!this.storageSupported) {
+    publishToStorage(payload) {
+        if (!this.storageSupported || !payload) {
             return;
         }
         try {
-            const payload = {
-                action,
-                originId: this.lmsOriginId,
-                source: 'leadQueueViewer',
-                timestamp: Date.now()
-            };
             window.localStorage.setItem(this.storageKey, JSON.stringify(payload));
         } catch (error) {
             // Ignore storage errors to avoid blocking UI actions.
@@ -237,17 +216,12 @@ export class LeadQueueRefreshManager {
         this.broadcastChannel = null;
     }
 
-    publishToBroadcast(action) {
-        if (!this.broadcastChannel) {
+    publishToBroadcast(payload) {
+        if (!this.broadcastChannel || !payload) {
             return;
         }
         try {
-            this.broadcastChannel.postMessage({
-                action,
-                originId: this.lmsOriginId,
-                source: 'leadQueueViewer',
-                timestamp: Date.now()
-            });
+            this.broadcastChannel.postMessage(payload);
         } catch (error) {
             // Ignore broadcast errors to avoid blocking UI actions.
         }

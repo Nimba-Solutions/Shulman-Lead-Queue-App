@@ -111,6 +111,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
             if (this.filterRequestId === currentRequestId) {
                 if (result && result.success) {
                     this.processQueueResponse(result);
+                    this.timerManager?.updateTimerState();
                     this.updateAssignedRecordSummaryFromDataset();
                     if (this.currentPage > this.totalPages) {
                         this.currentPage = this.totalPages;
@@ -261,7 +262,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
             });
         
         // Start live timer updates AFTER initial data load
-        this.timerManager.startTimerUpdates();
+        this.timerManager.updateTimerState();
     }
 
     renderedCallback() {
@@ -454,9 +455,13 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
         this.isReleasing = true;
         try {
             const releasedRecordId = this.assignedRecordId;
-            await releaseUserAssignments({ recordId: releasedRecordId });
-            this.showToast('Success', 'Released all assignments', 'success');
-            this.refreshManager?.publish('release');
+            const released = await releaseUserAssignments({ recordId: releasedRecordId });
+            if (released) {
+                this.showToast('Success', 'Released all assignments', 'success');
+                this.refreshManager?.publish('release');
+            } else {
+                this.showToast('Info', 'No active assignment to release', 'info');
+            }
             this.clearAssignmentsState();
             if (releasedRecordId) {
                 this.clearAssignmentForRecord(releasedRecordId);
@@ -506,6 +511,7 @@ export default class LeadQueueViewer extends NavigationMixin(LightningElement) {
                     }));
                 }, 100);
             }
+            this.timerManager?.updateTimerState();
         } catch (error) {
             console.error('Check assignments error details:', error);
             this.showToast('Error', 'Failed to check assignments: ' + this.getErrorMessage(error), 'error');
