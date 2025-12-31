@@ -2,7 +2,7 @@ import { LightningElement, api, wire } from 'lwc';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import { NavigationMixin } from 'lightning/navigation';
 import { subscribe as empSubscribe, unsubscribe as empUnsubscribe, onError } from 'lightning/empApi';
-import { publish, subscribe as lmsSubscribe, unsubscribe as lmsUnsubscribe, MessageContext } from 'lightning/messageService';
+import { publish, subscribe as lmsSubscribe, unsubscribe as lmsUnsubscribe, MessageContext, APPLICATION_SCOPE } from 'lightning/messageService';
 import LEAD_QUEUE_REFRESH from '@salesforce/messageChannel/LeadQueueRefresh__c';
 import {
     assignRecord,
@@ -41,14 +41,20 @@ export default class ClaimRecordButton extends NavigationMixin(LightningElement)
     eventRefreshTimeout;
     lmsSubscription;
     lmsOriginId;
+    storageKey = 'leadQueueRefresh';
+    storageListener;
+    broadcastChannel;
 
     @wire(MessageContext) messageContext;
 
     // Check assignments on component load
     connectedCallback() {
         this.lmsOriginId = this.lmsOriginId || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        this.storageListener = this.handleStorageEvent.bind(this);
+        this.broadcastChannel = this.initializeBroadcastChannel();
         this.subscribeToRefreshEvents();
         this.subscribeToMessageChannel();
+        this.registerStorageListener();
         this.checkCacheHealth();
         this.checkAssignments();
     }
@@ -60,6 +66,8 @@ export default class ClaimRecordButton extends NavigationMixin(LightningElement)
         }
         this.unsubscribeFromRefreshEvents();
         this.unsubscribeFromMessageChannel();
+        this.unregisterStorageListener();
+        this.closeBroadcastChannel();
     }
 
     renderedCallback() {
@@ -100,7 +108,7 @@ export default class ClaimRecordButton extends NavigationMixin(LightningElement)
         }
         this.lmsSubscription = lmsSubscribe(this.messageContext, LEAD_QUEUE_REFRESH, (payload) => {
             this.handleLmsMessage(payload);
-        });
+        }, { scope: APPLICATION_SCOPE });
     }
 
     unsubscribeFromMessageChannel() {
@@ -137,6 +145,7 @@ export default class ClaimRecordButton extends NavigationMixin(LightningElement)
 
     publishLmsMessage(action) {
         if (!this.messageContext) {
+            this.publishStorageMessage(action);
             return;
         }
         publish(this.messageContext, LEAD_QUEUE_REFRESH, {
@@ -145,6 +154,104 @@ export default class ClaimRecordButton extends NavigationMixin(LightningElement)
             source: 'claimRecordButton',
             timestamp: Date.now()
         });
+        this.publishBroadcastMessage(action);
+        this.publishStorageMessage(action);
+    }
+
+    registerStorageListener() {
+        if (typeof window === 'undefined' || !window.addEventListener || !window.localStorage) {
+            return;
+        }
+        window.addEventListener('storage', this.storageListener);
+    }
+
+    unregisterStorageListener() {
+        if (typeof window === 'undefined' || !window.removeEventListener) {
+            return;
+        }
+        window.removeEventListener('storage', this.storageListener);
+    }
+
+    publishStorageMessage(action) {
+        if (typeof window === 'undefined' || !window.localStorage) {
+            return;
+        }
+        try {
+            const payload = {
+                action,
+                originId: this.lmsOriginId,
+                source: 'claimRecordButton',
+                timestamp: Date.now()
+            };
+            window.localStorage.setItem(this.storageKey, JSON.stringify(payload));
+        } catch (error) {
+            // Ignore storage errors to avoid blocking UI actions.
+        }
+    }
+
+    handleStorageEvent(event) {
+        if (!event || event.key !== this.storageKey || !event.newValue) {
+            return;
+        }
+        try {
+            const payload = JSON.parse(event.newValue);
+            if (payload && payload.originId === this.lmsOriginId) {
+                return;
+            }
+        } catch (error) {
+            return;
+        }
+        this.scheduleEventRefresh();
+    }
+
+    initializeBroadcastChannel() {
+        if (typeof BroadcastChannel !== 'function') {
+            return null;
+        }
+        try {
+            const channel = new BroadcastChannel(this.storageKey);
+            channel.onmessage = (event) => {
+                this.handleBroadcastMessage(event?.data);
+            };
+            return channel;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    closeBroadcastChannel() {
+        if (!this.broadcastChannel) {
+            return;
+        }
+        try {
+            this.broadcastChannel.close();
+        } catch (error) {
+            // Ignore channel close errors.
+        }
+        this.broadcastChannel = null;
+    }
+
+    publishBroadcastMessage(action) {
+        if (!this.broadcastChannel) {
+            return;
+        }
+        try {
+            this.broadcastChannel.postMessage({
+                action,
+                originId: this.lmsOriginId,
+                source: 'claimRecordButton',
+                timestamp: Date.now()
+            });
+        } catch (error) {
+            // Ignore broadcast errors to avoid blocking UI actions.
+        }
+    }
+
+    handleBroadcastMessage(payload) {
+        if (!payload || payload.originId === this.lmsOriginId) {
+            return;
+        }
+        this.scheduleEventRefresh();
     }
 
     handleCdcMessage(message) {

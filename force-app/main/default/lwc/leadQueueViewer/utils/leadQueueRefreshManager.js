@@ -1,5 +1,5 @@
 import { subscribe as empSubscribe, unsubscribe as empUnsubscribe, onError } from 'lightning/empApi';
-import { publish, subscribe as lmsSubscribe, unsubscribe as lmsUnsubscribe } from 'lightning/messageService';
+import { publish, subscribe as lmsSubscribe, unsubscribe as lmsUnsubscribe, APPLICATION_SCOPE } from 'lightning/messageService';
 import LEAD_QUEUE_REFRESH from '@salesforce/messageChannel/LeadQueueRefresh__c';
 
 export class LeadQueueRefreshManager {
@@ -30,6 +30,13 @@ export class LeadQueueRefreshManager {
         this.eventRefreshTimeout = null;
         this.lmsOriginId = options.originId || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
         this.hasRegisteredEmpErrorHandler = false;
+        this.storageKey = options.storageKey || 'leadQueueRefresh';
+        this.storageListener = this.handleStorageEvent.bind(this);
+        this.storageSupported = typeof window !== 'undefined'
+            && typeof window.addEventListener === 'function'
+            && typeof window.removeEventListener === 'function'
+            && window.localStorage;
+        this.broadcastChannel = this.initializeBroadcastChannel();
     }
 
     setMessageContext(messageContext) {
@@ -42,6 +49,7 @@ export class LeadQueueRefreshManager {
     connect() {
         this.subscribeToRefreshEvents();
         this.subscribeToMessageChannel();
+        this.registerStorageListener();
     }
 
     disconnect() {
@@ -51,10 +59,13 @@ export class LeadQueueRefreshManager {
         }
         this.unsubscribeFromRefreshEvents();
         this.unsubscribeFromMessageChannel();
+        this.unregisterStorageListener();
+        this.closeBroadcastChannel();
     }
 
     publish(action) {
         if (!this.messageContext) {
+            this.publishToStorage(action);
             return;
         }
         publish(this.messageContext, LEAD_QUEUE_REFRESH, {
@@ -63,6 +74,8 @@ export class LeadQueueRefreshManager {
             source: 'leadQueueViewer',
             timestamp: Date.now()
         });
+        this.publishToBroadcast(action);
+        this.publishToStorage(action);
     }
 
     subscribeToRefreshEvents() {
@@ -100,7 +113,7 @@ export class LeadQueueRefreshManager {
         }
         this.lmsSubscription = lmsSubscribe(this.messageContext, LEAD_QUEUE_REFRESH, (payload) => {
             this.handleLmsMessage(payload);
-        });
+        }, { scope: APPLICATION_SCOPE });
     }
 
     unsubscribeFromMessageChannel() {
@@ -145,6 +158,102 @@ export class LeadQueueRefreshManager {
     }
 
     handleLmsMessage(payload) {
+        if (!payload || payload.originId === this.lmsOriginId) {
+            return;
+        }
+        this.scheduleEventRefresh();
+    }
+
+    registerStorageListener() {
+        if (!this.storageSupported) {
+            return;
+        }
+        window.addEventListener('storage', this.storageListener);
+    }
+
+    unregisterStorageListener() {
+        if (!this.storageSupported) {
+            return;
+        }
+        window.removeEventListener('storage', this.storageListener);
+    }
+
+    publishToStorage(action) {
+        if (!this.storageSupported) {
+            return;
+        }
+        try {
+            const payload = {
+                action,
+                originId: this.lmsOriginId,
+                source: 'leadQueueViewer',
+                timestamp: Date.now()
+            };
+            window.localStorage.setItem(this.storageKey, JSON.stringify(payload));
+        } catch (error) {
+            // Ignore storage errors to avoid blocking UI actions.
+        }
+    }
+
+    handleStorageEvent(event) {
+        if (!event || event.key !== this.storageKey || !event.newValue) {
+            return;
+        }
+        try {
+            const payload = JSON.parse(event.newValue);
+            if (payload && payload.originId === this.lmsOriginId) {
+                return;
+            }
+        } catch (error) {
+            return;
+        }
+        this.scheduleEventRefresh();
+    }
+
+    initializeBroadcastChannel() {
+        if (typeof BroadcastChannel !== 'function') {
+            return null;
+        }
+        try {
+            const channel = new BroadcastChannel(this.storageKey);
+            channel.onmessage = (event) => {
+                this.handleBroadcastMessage(event?.data);
+            };
+            return channel;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    closeBroadcastChannel() {
+        if (!this.broadcastChannel) {
+            return;
+        }
+        try {
+            this.broadcastChannel.close();
+        } catch (error) {
+            // Ignore channel close errors.
+        }
+        this.broadcastChannel = null;
+    }
+
+    publishToBroadcast(action) {
+        if (!this.broadcastChannel) {
+            return;
+        }
+        try {
+            this.broadcastChannel.postMessage({
+                action,
+                originId: this.lmsOriginId,
+                source: 'leadQueueViewer',
+                timestamp: Date.now()
+            });
+        } catch (error) {
+            // Ignore broadcast errors to avoid blocking UI actions.
+        }
+    }
+
+    handleBroadcastMessage(payload) {
         if (!payload || payload.originId === this.lmsOriginId) {
             return;
         }
