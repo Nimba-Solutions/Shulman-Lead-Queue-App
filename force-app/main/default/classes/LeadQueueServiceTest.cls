@@ -757,14 +757,12 @@ private class LeadQueueServiceTest {
             
             // If Intake Scheduled, must meet additional Sign Up Method criteria
             if (record.litify_pm__Status__c == 'Intake Scheduled') {
-                Boolean isESign = record.litify_pm__Sign_Up_Method__c == 'E-Sign';
-                Boolean isOfficeWithValidCallDate = record.litify_pm__Sign_Up_Method__c == 'Office' && 
-                                                   record.Call_at_Date__c != null && 
-                                                   record.Call_at_Date__c >= nowValue.addHours(-2) &&
-                                                   record.Call_at_Date__c <= nowValue.addHours(2);
+                Boolean validMethod = record.litify_pm__Sign_Up_Method__c == 'E-Sign'
+                    || record.litify_pm__Sign_Up_Method__c == 'Office';
+                Boolean validCallDate = record.Call_at_Date__c != null && record.Call_at_Date__c <= nowValue;
                 
-                Assert.isTrue(isESign || isOfficeWithValidCallDate, 
-                             'Intake Scheduled record must meet E-Sign OR (Office within +/-2 hours) criteria');
+                Assert.isTrue(validMethod && validCallDate,
+                             'Intake Scheduled record must use E-Sign or Office with Call_at_Date__c <= now');
             }
         }
         

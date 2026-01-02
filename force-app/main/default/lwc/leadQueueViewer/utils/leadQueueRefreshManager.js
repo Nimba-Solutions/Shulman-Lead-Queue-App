@@ -3,6 +3,8 @@ import { publish, subscribe as lmsSubscribe, unsubscribe as lmsUnsubscribe, APPL
 import LEAD_QUEUE_REFRESH from '@salesforce/messageChannel/LeadQueueRefresh__c';
 import { CDC_RELEVANT_FIELDS, buildRefreshPayload } from 'c/leadQueueRefreshConfig';
 
+let hasRegisteredEmpErrorHandler = false;
+
 export class LeadQueueRefreshManager {
     constructor(component, options = {}) {
         this.component = component;
@@ -14,7 +16,6 @@ export class LeadQueueRefreshManager {
         this.lmsSubscription = null;
         this.eventRefreshTimeout = null;
         this.lmsOriginId = options.originId || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        this.hasRegisteredEmpErrorHandler = false;
         this.storageKey = options.storageKey || 'leadQueueRefresh';
         this.storageListener = this.handleStorageEvent.bind(this);
         this.storageSupported = typeof window !== 'undefined'
@@ -75,11 +76,11 @@ export class LeadQueueRefreshManager {
             console.error('Failed to subscribe to Lead Queue CDC events:', error);
         });
 
-        if (!this.hasRegisteredEmpErrorHandler) {
+        if (!hasRegisteredEmpErrorHandler) {
             onError((error) => {
                 console.error('Lead Queue CDC error:', error);
             });
-            this.hasRegisteredEmpErrorHandler = true;
+            hasRegisteredEmpErrorHandler = true;
         }
     }
 
